@@ -1,0 +1,7 @@
+lsp4ij/build
+target
+video
+.gradle
+.idea
+.DS_Store
+bin/
