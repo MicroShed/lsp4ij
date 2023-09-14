@@ -3,8 +3,8 @@ plugins {
     id 'java'
 }
 
-group 'org.eclipse.lsp4ij'
-version '0.0.3'
+group 'org.microshed.lsp4ij'
+version '0.0.4'
 
 sourceCompatibility = 11
 targetCompatibility = 11
@@ -79,6 +79,9 @@ jar {
         exclude "META-INF/*.DSA"
         exclude "META-INF/*.RSA"
         duplicatesStrategy 'include' // error copying duplicate about.html
+    }
+    from { sourceSets.main.allSource } {
+        duplicatesStrategy 'exclude' // error copying .properties when adding source to jar
     }
     extension 'uber.jar'
 }

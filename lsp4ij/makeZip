@@ -1,3 +1,0 @@
-cp build/libs/lsp4ij-0.0.3.jar lsp4ij/lib
-rm lsp4ij.zip
-zip lsp4ij.zip lsp4ij
