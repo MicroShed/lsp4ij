@@ -8,7 +8,7 @@ import com.intellij.util.xmlb.annotations.Attribute;
 import org.microshed.lsp4ij.server.StreamConnectionProvider;
 
 public class ServerExtensionPointBean extends BaseKeyedLazyInstance<StreamConnectionProvider>  {
-    public static final ExtensionPointName<ServerExtensionPointBean> EP_NAME = ExtensionPointName.create("org.microshed.lsp4ij.server");
+    public static final ExtensionPointName<ServerExtensionPointBean> EP_NAME = ExtensionPointName.create(ExtensionPointBeanConstants.getServerExtensionName());
 
     @Attribute("id")
     public String id;

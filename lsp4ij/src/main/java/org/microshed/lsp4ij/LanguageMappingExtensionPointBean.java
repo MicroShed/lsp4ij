@@ -5,7 +5,7 @@ import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.util.xmlb.annotations.Attribute;
 
 public class LanguageMappingExtensionPointBean extends AbstractExtensionPointBean {
-    public static final ExtensionPointName<LanguageMappingExtensionPointBean> EP_NAME = ExtensionPointName.create("org.microshed.lsp4ij.languageMapping");
+    public static final ExtensionPointName<LanguageMappingExtensionPointBean> EP_NAME = ExtensionPointName.create(ExtensionPointBeanConstants.getLanguageMappingExtensionName());
 
     @Attribute("id")
     public String id;

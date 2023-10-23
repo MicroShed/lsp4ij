@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'org.microshed.lsp4ij'
-version '0.0.4'
+version '0.0.5'
 
 sourceCompatibility = 11
 targetCompatibility = 11
@@ -59,11 +59,6 @@ dependencies {
     //required by lsp4j as the version from IJ is incompatible
     implementation 'com.google.code.gson:gson:2.8.9'
     //Add junit dependency back when tests are added
-    //testImplementation group: 'junit', name: 'junit', version: '4.13.1'
-
-    // JUnit 4
-    //testImplementation 'org.junit.platform:junit-platform-launcher:1.9.3'
-    //testImplementation 'org.junit.vintage:junit-vintage-engine:5.9.3'
 }
 
 configurations.implementation.setCanBeResolved(true)
@@ -83,7 +78,7 @@ jar {
     from { sourceSets.main.allSource } {
         duplicatesStrategy 'exclude' // error copying .properties when adding source to jar
     }
-    extension 'uber.jar'
+    extension 'jar'
 }
 
 intellij {
