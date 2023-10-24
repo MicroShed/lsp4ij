@@ -50,6 +50,9 @@ public class LanguageClientImpl implements LanguageClient {
         return server;
     }
 
+    protected final LanguageServerWrapper getLanguageServerWrapper() {
+        return wrapper;
+    }
     @Override
     public void telemetryEvent(Object object) {
         // TODO
