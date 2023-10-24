@@ -9,7 +9,7 @@ We welcome contributions, and request you follow these guidelines.
 
 ### Raising issues
 
-Please raise any bug reports on the [issue tracker](https://github.ibm.com/liberty-dev-ex/intellij-lsp-common-provider). Be sure to search the list to see if your issue has already been raised.
+Please raise any bug reports on the [issue tracker](https://github.com/MicroShed/lsp4ij/issues). Be sure to search the list to see if your issue has already been raised.
 
 A good bug report makes it easy for us to understand what you were trying to do and what went wrong. Provide as much context as possible so we can try to recreate the issue.
 
