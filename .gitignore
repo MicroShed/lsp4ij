@@ -1,0 +1,7 @@
+build
+target
+video
+.gradle
+.idea
+.DS_Store
+bin/

@@ -1,2 +1,25 @@
-# lsp4ij
-Common LSP provider component for IntelliJ
+# Tools for IntelliJ IDEA
+
+This project provides classes necessary for the JetBrains IntelliJ interactive development environment to communicate with components that adhere to the language server protocol. This protocol is described in a [Specification](https://microsoft.github.io/language-server-protocol/)
+
+## Requirements
+**Java 11** or later.
+
+## Build
+Run `./gradlew jar` to generate the jar file. To use as a jar dependency run this command to copy it into your local Maven repository. 
+mvn install:install-file \
+   -Dfile=build/libs/lsp4ij-0.0.5.jar \
+   -DgroupId=org.microshed \
+   -DartifactId=lsp4ij \
+   -Dversion=0.0.5 \
+   -Dpackaging=jar \
+   -DgeneratePom=true;
+Your plugin must define the extension points in plugin.xml or include lsp4ij.xml. It must also define the plugin namespace in pluginNamespace.properties as "pluginNamespace=xxx" for use at runtime.
+
+## Contributing
+
+See the [CONTRIBUTING](CONTRIBUTING.md) document for more details.
+
+## Issues
+
+Please report bugs, issues and feature requests as described in the [CONTRIBUTING](CONTRIBUTING.md) document.
