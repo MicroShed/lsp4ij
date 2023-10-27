@@ -1,9 +1,11 @@
 plugins {
     id 'org.jetbrains.intellij' version '1.13.3'
     id 'java'
+    id 'java-library'
+    id 'maven-publish'
 }
 
-group 'org.microshed.lsp4ij'
+group 'org.microshed'
 version '0.0.5'
 
 sourceCompatibility = 11
@@ -41,6 +43,14 @@ repositories {
         url = "https://cache-redirector.jetbrains.com/download-pgp-verifier"
     }
     mavenLocal() // TODO remove once Liberty LS is publicly available
+}
+
+publishing {
+    publications {
+        library(MavenPublication) {
+            from components.java
+        }
+    }
 }
 
 configurations {
