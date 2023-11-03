@@ -19,6 +19,11 @@ import org.eclipse.lsp4j.jsonrpc.CompletableFutures.FutureCancelChecker;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
+/**
+ * {@link CompletableFuture} utility class.
+ *
+ * @author Angelo ZERR
+ */
 public class CompletableFutures {
 
     private CompletableFutures() {
