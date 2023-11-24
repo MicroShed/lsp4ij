@@ -51,9 +51,9 @@ import java.util.concurrent.CompletableFuture;
 public class CommandExecutor {
     private static final Logger LOGGER = LoggerFactory.getLogger(CommandExecutor.class);
 
-    public static final DataKey<Command> LSP_COMMAND = DataKey.create("com.redhat.devtools.intellij.quarkus.lsp4ij.command");
+    public static final DataKey<Command> LSP_COMMAND = DataKey.create("org.microshed.lsp4ij.commands.command");
 
-    public static final DataKey<URI> LSP_COMMAND_DOCUMENT_URI = DataKey.create("com.redhat.devtools.intellij.quarkus.lsp4ij.command.documentUri");
+    public static final DataKey<URI> LSP_COMMAND_DOCUMENT_URI = DataKey.create("org.microshed.lsp4ij.commands.command.documentUri");
 
     /**
      * Will execute the given {@code command} either on a language server,
