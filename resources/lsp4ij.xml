@@ -29,6 +29,7 @@
                     icon="AllIcons.Webreferences.Server"/>
     </extensions>
 
+    <!-- LSP consoles continued -->
     <actions resource-bundle="messages.LanguageServerBundle">
         <action id="lsp.console.explorer.restart"
                 class="org.microshed.lsp4ij.console.explorer.actions.RestartServerAction"
