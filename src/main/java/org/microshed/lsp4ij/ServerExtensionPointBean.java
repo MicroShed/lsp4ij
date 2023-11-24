@@ -8,7 +8,7 @@ import org.microshed.lsp4ij.server.StreamConnectionProvider;
 import org.jetbrains.annotations.Nullable;
 
 public class ServerExtensionPointBean extends BaseKeyedLazyInstance<StreamConnectionProvider> {
-    public static final ExtensionPointName<ServerExtensionPointBean> EP_NAME = ExtensionPointName.create("com.redhat.devtools.intellij.quarkus.server");
+    public static final ExtensionPointName<ServerExtensionPointBean> EP_NAME = ExtensionPointName.create(ExtensionPointBeanConstants.getServerExtensionName());
 
     @Attribute("id")
     public String id;

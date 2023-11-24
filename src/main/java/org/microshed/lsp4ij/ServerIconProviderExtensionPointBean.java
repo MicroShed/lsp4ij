@@ -23,7 +23,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public class ServerIconProviderExtensionPointBean extends BaseKeyedLazyInstance<ServerIconProvider> {
 
-    public static final ExtensionPointName<ServerIconProviderExtensionPointBean> EP_NAME = ExtensionPointName.create("com.redhat.devtools.intellij.quarkus.serverIconProvider");
+    public static final ExtensionPointName<ServerIconProviderExtensionPointBean> EP_NAME = ExtensionPointName.create(ExtensionPointBeanConstants.getServerIconExtensionName());
 
     @Attribute("serverId")
     public String serverId;

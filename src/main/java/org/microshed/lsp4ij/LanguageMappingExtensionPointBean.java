@@ -10,7 +10,7 @@ public class LanguageMappingExtensionPointBean extends BaseKeyedLazyInstance<Doc
 
     private static final DocumentMatcher DEFAULT_DOCUMENT_MATCHER = (file,project) -> true;
 
-    public static final ExtensionPointName<LanguageMappingExtensionPointBean> EP_NAME = ExtensionPointName.create("com.redhat.devtools.intellij.quarkus.languageMapping");
+    public static final ExtensionPointName<LanguageMappingExtensionPointBean> EP_NAME = ExtensionPointName.create(ExtensionPointBeanConstants.getLanguageMappingExtensionName());
 
     @Attribute("id")
     public String id;
