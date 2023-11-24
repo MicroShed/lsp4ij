@@ -18,16 +18,15 @@
                         beanClass="org.microshed.lsp4ij.ServerExtensionPointBean"/>
         <extensionPoint name="languageMapping"
                         beanClass="org.microshed.lsp4ij.LanguageMappingExtensionPointBean"/>
+        <extensionPoint name="serverIconProvider"
+                        beanClass="org.microshed.lsp4ij.ServerIconProviderExtensionPointBean"/>
     </extensionPoints>
     <extensions defaultExtensionNs="com.intellij">
         <!-- Completion support for all language servers -->
         <completion.contributor id="LSPCompletionContributor" language="any"
-                                implementationClass="org.microshed.lsp4ij.operations.completion.LSContentAssistProcessor"
+                                implementationClass="org.microshed.lsp4ij.operations.completion.LSPCompletionContributor"
                                 order="first"/>
 
-        <!-- Diagnostic support for all language servers -->
-        <inspectionToolProvider
-                implementation="org.microshed.lsp4ij.operations.diagnostics.LSPInspectionToolProvider"/>
         <projectService serviceImplementation="org.microshed.lsp4ij.LanguageServiceAccessor"/>
         <!-- TODO re-enable goto handler -->
         <!-- <gotoDeclarationHandler
@@ -35,18 +34,18 @@
 
         <!-- Hover for LemMinX + Liberty LemMinX ext -->
         <lang.documentationProvider id="LSPTextHoverXML" language="XML"
-                                    implementationClass="org.microshed.lsp4ij.operations.hover.LSPTextHover"
+                                    implementationClass="org.microshed.lsp4ij.operations.documentation.LSPDocumentationProvider"
                                     order="first"/>
         <!-- Hover for Liberty Config LS bootstrap.properties and LSP4MP microprofile-config.properties -->
         <lang.documentationProvider id="LSPTextHoverProperties" language="Properties"
-                                    implementationClass="org.microshed.lsp4ij.operations.hover.LSPTextHover"
+                                    implementationClass="org.microshed.lsp4ij.operations.documentation.LSPDocumentationProvider"
                                     order="first"/>
         <!-- Hover for Java files, LSP4MP and LSP4Jakarta -->
         <lang.documentationProvider id="LSPTextHoverJAVA" language="JAVA"
-                                    implementationClass="org.microshed.lsp4ij.operations.hover.LSPTextHover"
+                                    implementationClass="org.microshed.lsp4ij.operations.documentation.LSPDocumentationProvider"
                                     order="first"/>
         <codeInsight.inlayProvider language="JAVA"
-                                   implementationClass="org.microshed.lsp4ij.operations.codelens.LSPInlayProvider"/>
+                                   implementationClass="org.microshed.lsp4ij.operations.codelens.LSPCodelensInlayProvider"/>
         <externalAnnotator language="XML" implementationClass="org.microshed.lsp4ij.operations.diagnostics.LSPDiagnosticAnnotator"/>
         <externalAnnotator language="TEXT" implementationClass="org.microshed.lsp4ij.operations.diagnostics.LSPDiagnosticAnnotator"/>
         <externalAnnotator language="Properties" implementationClass="org.microshed.lsp4ij.operations.diagnostics.LSPDiagnosticAnnotator"/>
