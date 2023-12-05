@@ -25,8 +25,6 @@ import org.jetbrains.annotations.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.microshed.lsp4ij.operations.completion.CompletionProposalTools.getCompletionPrefix;
-
 /**
  * Completion prefix provides the capability to compute the prefix where the completion has been triggered and by using the LSP {@link org.eclipse.lsp4j.TextEdit} information.
  * <p>
@@ -68,7 +66,7 @@ public class CompletionPrefix {
         if (prefix == null && !prefixCache.containsKey(textEditRange)) {
             // Compute the prefix which can be null
             // ex : {#ea|ch will return {#ea
-            prefix = getCompletionPrefix(completionPos, textEditRange, document);
+            prefix = CompletionProposalTools.getCompletionPrefix(completionPos, textEditRange, document);
             prefixCache.put(textEditRange, prefix);
         }
         if (prefix == null) {

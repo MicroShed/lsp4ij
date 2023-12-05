@@ -29,6 +29,7 @@ import org.microshed.lsp4ij.client.LanguageClientImpl;
 import org.microshed.lsp4ij.internal.SupportedFeatures;
 import org.microshed.lsp4ij.lifecycle.LanguageServerLifecycleManager;
 import org.microshed.lsp4ij.lifecycle.NullLanguageServerLifecycleManager;
+import org.microshed.lsp4ij.server.*;
 import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.Launcher;
 import org.eclipse.lsp4j.jsonrpc.MessageConsumer;
@@ -37,7 +38,6 @@ import org.eclipse.lsp4j.jsonrpc.messages.Message;
 import org.eclipse.lsp4j.services.LanguageServer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.microshed.lsp4ij.server.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -222,8 +222,8 @@ public class LanguageServerWrapper implements Disposable {
         this.initialPath = initialPath;
         this.serverDefinition = serverDefinition;
         this.connectedDocuments = new HashMap<>();
-        String projectName = (project != null && project.getName() != null && !serverDefinition.isSingleton) ? ("@" + project.getName()) : "";  //$NON-NLS-1$//$NON-NLS-2$
-        String dispatcherThreadNameFormat = "LS-" + serverDefinition.id + projectName + "#dispatcher"; //$NON-NLS-1$ //$NON-NLS-2$
+        String projectName = sanitize((project != null && project.getName() != null && !serverDefinition.isSingleton) ? ("@" + project.getName()) : "");  //$NON-NLS-1$//$NON-NLS-2$
+        String dispatcherThreadNameFormat ="LS-" + serverDefinition.id + projectName + "#dispatcher"; //$NON-NLS-1$ //$NON-NLS-2$
         this.dispatcher = Executors
                 .newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat(dispatcherThreadNameFormat).build());
 
@@ -240,6 +240,13 @@ public class LanguageServerWrapper implements Disposable {
             // We do that to be sure that language server is disposed.
             Disposer.register(project, this);
         }
+    }
+
+    /**
+     * Removes '%' from the given name
+     */
+    private static String sanitize(String name) {
+        return name.replace("%","");
     }
 
     public Project getProject() {
@@ -497,7 +504,12 @@ public class LanguageServerWrapper implements Disposable {
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                stop();
+                try {
+                    stop();
+                } catch (Throwable t) {
+                    //Need to catch time task exceptions, or it will cancel the timer
+                    LOGGER.error("Failed to stop language server "+LanguageServerWrapper.this.serverDefinition.id, t);
+                }
             }
         }, TimeUnit.SECONDS.toMillis(this.serverDefinition.lastDocumentDisconnectedTimeout));
     }

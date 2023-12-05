@@ -1,3 +1,13 @@
+/*******************************************************************************
+ * Copyright (c) 2019 Red Hat, Inc.
+ * Distributed under license by Red Hat, Inc. All rights reserved.
+ * This program is made available under the terms of the
+ * Eclipse Public License v2.0 which accompanies this distribution,
+ * and is available at https://www.eclipse.org/legal/epl-v20.html
+ *
+ * Contributors:
+ * Red Hat, Inc. - initial API and implementation
+ ******************************************************************************/
 package org.microshed.lsp4ij;
 
 import com.intellij.lang.Language;
@@ -20,7 +30,7 @@ public class ContentTypeToLanguageServerDefinition extends AbstractMap.SimpleEnt
     }
 
     public boolean match(VirtualFile file, Project project) {
-        return documentMatcher.match(file, project);
+        return getValue().supportsCurrentEditMode(project) && documentMatcher.match(file, project);
     }
 
     public boolean shouldBeMatchedAsynchronously(Project project) {
@@ -32,6 +42,9 @@ public class ContentTypeToLanguageServerDefinition extends AbstractMap.SimpleEnt
     }
 
     public @NotNull <R> CompletableFuture<Boolean> matchAsync(VirtualFile file, Project project) {
+        if (!getValue().supportsCurrentEditMode(project)) {
+            return CompletableFuture.completedFuture(false);
+        }
         return documentMatcher.matchAsync(file, project);
     }
 }

@@ -10,10 +10,8 @@
  ******************************************************************************/
 package org.microshed.lsp4ij;
 
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
-import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManagerListener;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -56,18 +54,11 @@ public class ConnectDocumentToLanguageServerSetupParticipant implements ProjectM
     @Override
     public void fileOpened(@NotNull FileEditorManager source, @NotNull VirtualFile file) {
         Project project = source.getProject();
-        boolean readAccessAllowed = ApplicationManager.getApplication().isReadAccessAllowed();
-        boolean dumb = DumbService.isDumb(project);
-        // As document matcher requires read action, we try to open the file in read action and when indexing is finishsed.
-        if (readAccessAllowed && !dumb) {
-            // No indexing and read action enabled
-            // --> force the start of all languages servers mapped with the given file immediately
-            connectToLanguageServer(file, project);
-        } else {
-            // Wait for indexing is finished and read action is enabled
-            // --> force the start of all languages servers mapped with the given file when indexing is finished and read action is allowed
-            new ConnectToLanguageServerCompletableFuture(file, project);
-        }
+        // As document matcher requires read action, and language server starts can take some times, we connect the file in a future
+        // to avoid starting language server in the EDT Thread which could freeze IJ.
+        // Wait for indexing is finished and read action is enabled
+        // --> force the start of all languages servers mapped with the given file when indexing is finished and read action is allowed
+        new ConnectToLanguageServerCompletableFuture(file, project);
     }
 
     private static void connectToLanguageServer(@NotNull VirtualFile file, @NotNull Project project) {

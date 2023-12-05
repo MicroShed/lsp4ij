@@ -33,6 +33,8 @@ import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.jetbrains.annotations.NotNull;
 
+import static org.microshed.lsp4ij.operations.codeactions.LSPLazyCodeActions.NO_CODEACTION_AT_INDEX;
+
 /**
  * The lazy IJ Quick fix.
  */
@@ -158,7 +160,7 @@ public class LSPLazyCodeActionIntentionAction implements IntentionAction {
     }
 
     private boolean isValidCodeAction() {
-        return action != null && !LSPLazyCodeActions.NO_CODEACTION_AT_INDEX.equals(action);
+        return action != null && !NO_CODEACTION_AT_INDEX.equals(action);
     }
 
 }

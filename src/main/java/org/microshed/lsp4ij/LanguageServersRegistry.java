@@ -11,6 +11,7 @@
 package org.microshed.lsp4ij;
 
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.lightEdit.LightEdit;
 import com.intellij.lang.Language;
 import com.intellij.openapi.project.Project;
 import org.microshed.lsp4ij.client.LanguageClientImpl;
@@ -53,9 +54,11 @@ public class LanguageServersRegistry {
         public final int lastDocumentDisconnectedTimeout;
         private boolean enabled;
 
+        public final boolean supportsLightEdit;
+
         final @Nonnull Scope scope;
 
-        public LanguageServerDefinition(@Nonnull String id, @Nonnull String label, String description, boolean isSingleton, Integer lastDocumentDisconnectedTimeout, String scope) {
+        public LanguageServerDefinition(@Nonnull String id, @Nonnull String label, String description, boolean isSingleton, Integer lastDocumentDisconnectedTimeout, String scope, boolean supportsLightEdit) {
             this.id = id;
             this.label = label;
             this.description = description;
@@ -63,6 +66,7 @@ public class LanguageServersRegistry {
             this.lastDocumentDisconnectedTimeout = lastDocumentDisconnectedTimeout != null && lastDocumentDisconnectedTimeout > 0 ? lastDocumentDisconnectedTimeout : DEFAULT_LAST_DOCUMENTED_DISCONNECTED_TIMEOUT;
             this.languageIdMappings = new ConcurrentHashMap<>();
             this.scope = scope == null || scope.isBlank()? Scope.application : Scope.valueOf(scope);
+            this.supportsLightEdit = supportsLightEdit;
             setEnabled(true);
         }
 
@@ -107,13 +111,17 @@ public class LanguageServersRegistry {
         public <S extends LanguageServer> Launcher.Builder<S> createLauncherBuilder() {
             return new Launcher.Builder<>();
         }
+
+        public boolean supportsCurrentEditMode(@NotNull Project project) {
+            return project != null && (supportsLightEdit || !LightEdit.owns(project));
+        }
     }
 
     static class ExtensionLanguageServerDefinition extends LanguageServerDefinition {
         private final ServerExtensionPointBean extension;
 
         public ExtensionLanguageServerDefinition(ServerExtensionPointBean element) {
-            super(element.id, element.label, element.description, element.singleton, element.lastDocumentDisconnectedTimeout, element.scope);
+            super(element.id, element.label, element.description, element.singleton, element.lastDocumentDisconnectedTimeout, element.scope, element.supportsLightEdit);
             this.extension = element;
         }
 

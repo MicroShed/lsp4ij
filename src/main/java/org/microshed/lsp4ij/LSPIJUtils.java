@@ -1,3 +1,13 @@
+/*******************************************************************************
+ * Copyright (c) 2019 Red Hat, Inc.
+ * Distributed under license by Red Hat, Inc. All rights reserved.
+ * This program is made available under the terms of the
+ * Eclipse Public License v2.0 which accompanies this distribution,
+ * and is available at https://www.eclipse.org/legal/epl-v20.html
+ *
+ * Contributors:
+ * Red Hat, Inc. - initial API and implementation
+ ******************************************************************************/
 package org.microshed.lsp4ij;
 
 import com.intellij.lang.Language;
@@ -43,6 +53,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Utilities class for LSP.
+ */
 public class LSPIJUtils {
     private static final Logger LOGGER = LoggerFactory.getLogger(LSPIJUtils.class);
 
@@ -285,6 +298,7 @@ public class LSPIJUtils {
     }
 
     private static @Nullable PsiElement getNavigationElement(PsiElement psiMember) {
+        //FIXME LightRecordField depends on the com.intellij.java plugin
         if (psiMember instanceof LightRecordField) {
             psiMember = ((LightRecordField) psiMember).getRecordComponent();
         }

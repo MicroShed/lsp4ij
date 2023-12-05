@@ -30,8 +30,6 @@ import org.microshed.lsp4ij.LanguageServiceAccessor;
 import org.microshed.lsp4ij.commands.CommandExecutor;
 import org.microshed.lsp4ij.internal.StringUtils;
 import org.microshed.lsp4ij.operations.completion.snippet.LspSnippetIndentOptions;
-import org.microshed.lsp4ij.operations.completion.snippet.LspSnippetVariableConstants;
-import org.microshed.lsp4ij.ui.IconMapper;
 import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.jetbrains.annotations.NotNull;
@@ -46,7 +44,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import static org.microshed.lsp4ij.operations.completion.CompletionProposalTools.createLspIndentOptions;
+import static org.microshed.lsp4ij.operations.completion.snippet.LspSnippetVariableConstants.*;
+import static org.microshed.lsp4ij.ui.IconMapper.getIcon;
 
 /**
  * LSP completion lookup element.
@@ -84,7 +83,7 @@ public class LSPCompletionProposal extends LookupElement {
             // Insert text has snippet syntax, ex : ${1:name}
             String snippetContent = getInsertText();
             // Get the indentation settings
-            LspSnippetIndentOptions indentOptions = createLspIndentOptions(snippetContent, file);
+            LspSnippetIndentOptions indentOptions = CompletionProposalTools.createLspIndentOptions(snippetContent, file);
             // Load the insert text to build:
             // - an IJ Template instance which will take care of replacement of placeholders
             // - the insert text without placeholders
@@ -194,7 +193,7 @@ public class LSPCompletionProposal extends LookupElement {
     public void renderElement(LookupElementPresentation presentation) {
         presentation.setItemText(item.getLabel());
         presentation.setTypeText(item.getDetail());
-        presentation.setIcon(IconMapper.getIcon(item.getKind()));
+        presentation.setIcon(getIcon(item.getKind()));
         if (isDeprecated()) {
             presentation.setStrikeout(true);
         }
@@ -313,22 +312,22 @@ public class LSPCompletionProposal extends LookupElement {
     private @Nullable String getVariableValue(String variableName) {
         Document document = editor.getDocument();
         switch (variableName) {
-            case LspSnippetVariableConstants.TM_FILENAME_BASE:
+            case TM_FILENAME_BASE:
                 String fileName = LSPIJUtils.getFile(document).getNameWithoutExtension();
                 return fileName != null ? fileName : ""; //$NON-NLS-1$
-            case LspSnippetVariableConstants.TM_FILENAME:
+            case TM_FILENAME:
                 return LSPIJUtils.getFile(document).getName();
-            case LspSnippetVariableConstants.TM_FILEPATH:
+            case TM_FILEPATH:
                 return LSPIJUtils.getFile(document).getPath();
-            case LspSnippetVariableConstants.TM_DIRECTORY:
+            case TM_DIRECTORY:
                 return LSPIJUtils.getFile(document).getParent().getPath();
-            case LspSnippetVariableConstants.TM_LINE_INDEX:
+            case TM_LINE_INDEX:
                 int lineIndex = getTextEditRange().getStart().getLine();
                 return Integer.toString(lineIndex);
-            case LspSnippetVariableConstants.TM_LINE_NUMBER:
+            case TM_LINE_NUMBER:
                 int lineNumber = getTextEditRange().getStart().getLine();
                 return Integer.toString(lineNumber + 1);
-            case LspSnippetVariableConstants.TM_CURRENT_LINE:
+            case TM_CURRENT_LINE:
                 int currentLineIndex = getTextEditRange().getStart().getLine();
                 try {
                     int lineOffsetStart = document.getLineStartOffset(currentLineIndex);
@@ -339,7 +338,7 @@ public class LSPCompletionProposal extends LookupElement {
                     LOGGER.warn(e.getMessage(), e);
                     return ""; //$NON-NLS-1$
                 }
-            case LspSnippetVariableConstants.TM_SELECTED_TEXT:
+            case TM_SELECTED_TEXT:
                 Range selectedRange = getTextEditRange();
                 try {
                     int startOffset = LSPIJUtils.toOffset(selectedRange.getStart(), document);
@@ -350,7 +349,7 @@ public class LSPCompletionProposal extends LookupElement {
                     LOGGER.warn(e.getMessage(), e);
                     return ""; //$NON-NLS-1$
                 }
-            case LspSnippetVariableConstants.TM_CURRENT_WORD:
+            case TM_CURRENT_WORD:
                 return ""; //$NON-NLS-1$
             default:
                 return null;

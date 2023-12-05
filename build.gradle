@@ -6,10 +6,10 @@ plugins {
 }
 
 group 'org.microshed'
-version '0.0.2'
+version '0.0.3'
 
-sourceCompatibility = 11
-targetCompatibility = 11
+sourceCompatibility = 17
+targetCompatibility = 17
 compileJava.options.debugOptions.debugLevel = "source,lines,vars"
 compileTestJava.options.debugOptions.debugLevel = "source,lines,vars"
 
