@@ -20,13 +20,8 @@ public class ExtensionPointBeanConstants {
 
     private static String getNamespaceName() {
         if (resourceBundle == null) {
-            LOGGER.warning("resourceBundle == null");
-            LOGGER.warning("Meta="+new File("META-INF").exists());
-            LOGGER.warning("Meta Path="+new File("META-INF").getAbsolutePath());
             resourceBundle = ResourceBundle.getBundle(propertiesName, new Locale("en"));
-            LOGGER.warning("pluginNamespaceProperty1="+resourceBundle.getString(pluginNamespaceProperty));
         }
-        LOGGER.warning("pluginNamespaceProperty2="+resourceBundle.getString(pluginNamespaceProperty));
         if (resourceBundle.containsKey(pluginNamespaceProperty)) {
             return resourceBundle.getString(pluginNamespaceProperty);
         } else {
