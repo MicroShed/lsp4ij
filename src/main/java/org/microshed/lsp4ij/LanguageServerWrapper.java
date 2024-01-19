@@ -728,12 +728,6 @@ public class LanguageServerWrapper implements Disposable {
                 Document document = LSPIJUtils.getDocument(file);
                 DocumentContentSynchronizer synchronizer = new DocumentContentSynchronizer(this, fileUri, document, syncKind);
                 document.addDocumentListener(synchronizer);
-                Set<DocumentContentSynchronizer> synchronizers = document.getUserData(DocumentContentSynchronizer.KEY);
-                if (synchronizers == null) {
-                    synchronizers = Collections.synchronizedSet(new LinkedHashSet<>());
-                    document.putUserData(DocumentContentSynchronizer.KEY, synchronizers);
-                }
-                synchronizers.add(synchronizer);
 
                 LSPVirtualFileData data = new LSPVirtualFileData(this, file, synchronizer);
                 LanguageServerWrapper.this.connectedDocuments.put(fileUri, data);
@@ -754,13 +748,6 @@ public class LanguageServerWrapper implements Disposable {
             DocumentContentSynchronizer synchronizer = data.getSynchronizer();
             final Document document = synchronizer.getDocument();
             document.removeDocumentListener(synchronizer);
-            Set<DocumentContentSynchronizer> synchronizers = document.getUserData(DocumentContentSynchronizer.KEY);
-            if (synchronizers != null) {
-                synchronizers.remove(synchronizer);
-                if (synchronizers.isEmpty()) {
-                    document.putUserData(DocumentContentSynchronizer.KEY, null);
-                }
-            }
             synchronizer.documentClosed();
         }
         if (stopIfNoOpenedFiles && this.connectedDocuments.isEmpty()) {
