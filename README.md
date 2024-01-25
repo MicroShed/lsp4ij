@@ -6,14 +6,8 @@ This project provides classes necessary for the JetBrains IntelliJ interactive d
 **Java 11** or later.
 
 ## Build
-Run `./gradlew jar` to generate the jar file. To use as a jar dependency run this command to copy it into your local Maven repository. 
-mvn install:install-file \
-   -Dfile=build/libs/lsp4ij-0.0.5.jar \
-   -DgroupId=org.microshed \
-   -DartifactId=lsp4ij \
-   -Dversion=0.0.5 \
-   -Dpackaging=jar \
-   -DgeneratePom=true;
+Run `./gradlew jar` to generate the jar file. To use as a jar dependency run this command to copy it into your local Maven repository: `./gradlew publishToMavenLocal`
+
 Your plugin must define the extension points in plugin.xml or include lsp4ij.xml. It must also define the plugin namespace in pluginNamespace.properties as "pluginNamespace=xxx" for use at runtime.
 
 ## Contributing

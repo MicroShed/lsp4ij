@@ -15,11 +15,14 @@ import com.intellij.codeInsight.highlighting.HighlightUsagesHandlerBase;
 import com.intellij.codeInsight.highlighting.HighlightUsagesHandlerFactory;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressManager;
-import com.intellij.psi.PsiElement;
+import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import org.microshed.lsp4ij.LSPIJUtils;
 import org.microshed.lsp4ij.LanguageServiceAccessor;
+import org.microshed.lsp4ij.internal.CancellationSupport;
 import org.eclipse.lsp4j.DocumentHighlight;
 import org.eclipse.lsp4j.DocumentHighlightParams;
 import org.eclipse.lsp4j.Position;
@@ -27,7 +30,6 @@ import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -43,46 +45,52 @@ public class LSPHighlightUsagesHandlerFactory implements HighlightUsagesHandlerF
 
     @Override
     public @Nullable HighlightUsagesHandlerBase createHighlightUsagesHandler(@NotNull Editor editor, @NotNull PsiFile file) {
-        List<PsiElement> targets = getTargets(editor, file);
-        return targets.isEmpty()?null:new LSPHighlightUsagesHandler(editor, file, targets);
+        List<LSPHighlightPsiElement> targets = getTargets(editor, file);
+        return targets.isEmpty() ? null : new LSPHighlightUsagesHandler(editor, file, targets);
     }
 
-    private List<PsiElement> getTargets(Editor editor, PsiFile file) {
-        List<PsiElement> elements = new ArrayList<>();
+    private List<LSPHighlightPsiElement> getTargets(Editor editor, PsiFile psiFile) {
+        VirtualFile file = LSPIJUtils.getFile(psiFile);
+        if (file == null) {
+            return Collections.emptyList();
+        }
+        List<LSPHighlightPsiElement> elements = new ArrayList<>();
+        final CancellationSupport cancellationSupport = new CancellationSupport();
         try {
-            int offset = TargetElementUtil.adjustOffset(file, editor.getDocument(), editor.getCaretModel().getOffset());
             Document document = editor.getDocument();
-            Position position;
-            position = LSPIJUtils.toPosition(offset, document);
-            URI uri = LSPIJUtils.toUri(document);
-            if(uri == null) {
-                return Collections.emptyList();
-            }
+            int offset = TargetElementUtil.adjustOffset(psiFile, document, editor.getCaretModel().getOffset());
+            Position position = LSPIJUtils.toPosition(offset, document);
+
             ProgressManager.checkCanceled();
-            TextDocumentIdentifier identifier = new TextDocumentIdentifier(uri.toString());
+
+            String uri = LSPIJUtils.toUriAsString(file);
+            TextDocumentIdentifier identifier = new TextDocumentIdentifier(uri);
             DocumentHighlightParams params = new DocumentHighlightParams(identifier, position);
             BlockingDeque<DocumentHighlight> highlights = new LinkedBlockingDeque<>();
-            CompletableFuture<Void> future = LanguageServiceAccessor.getInstance(editor.getProject()).getLanguageServers(document,
-                            capabilities -> LSPIJUtils.hasCapability(capabilities.getDocumentHighlightProvider()))
+
+            CompletableFuture<Void> future = LanguageServiceAccessor.getInstance(editor.getProject())
+                    .getLanguageServers(file, capabilities -> LSPIJUtils.hasCapability(capabilities.getDocumentHighlightProvider()))
                     .thenAcceptAsync(languageServers ->
-                            CompletableFuture.allOf(languageServers.stream()
-                                    .map(languageServer -> languageServer.getTextDocumentService().documentHighlight(params))
+                            cancellationSupport.execute(CompletableFuture.allOf(languageServers.stream()
+                                    .map(languageServer -> cancellationSupport.execute(languageServer.getServer().getTextDocumentService().documentHighlight(params)))
                                     .map(request -> request.thenAcceptAsync(result -> {
                                         if (result != null) {
-                                            result.forEach(hightlight -> highlights.add(hightlight));
+                                            highlights.addAll(result);
                                         }
-                                    })).toArray(CompletableFuture[]::new)));
+                                    })).toArray(CompletableFuture[]::new))));
             while (!future.isDone() || !highlights.isEmpty()) {
                 ProgressManager.checkCanceled();
                 DocumentHighlight highlight = highlights.poll(25, TimeUnit.MILLISECONDS);
                 if (highlight != null) {
-                    int highlightOffset = LSPIJUtils.toOffset(highlight.getRange().getStart(), document);
-                    PsiElement element = file.findElementAt(highlightOffset);
-                    if (element != null) {
-                        elements.add(element);
+                    TextRange textRange = LSPIJUtils.toTextRange(highlight.getRange(), document);
+                    if (textRange != null) {
+                        elements.add(new LSPHighlightPsiElement(textRange, highlight.getKind()));
                     }
                 }
             }
+        } catch (ProcessCanceledException cancellation) {
+            cancellationSupport.cancel();
+            throw cancellation;
         } catch (InterruptedException e) {
             LOGGER.log(Level.WARNING, e, e::getLocalizedMessage);
         }

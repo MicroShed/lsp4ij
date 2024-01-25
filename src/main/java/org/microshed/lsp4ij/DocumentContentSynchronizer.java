@@ -6,7 +6,6 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
-import com.intellij.openapi.util.Key;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
@@ -22,10 +21,10 @@ import org.eclipse.lsp4j.TextDocumentSyncKind;
 import org.eclipse.lsp4j.TextDocumentSyncOptions;
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nonnull;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,47 +33,35 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 public class DocumentContentSynchronizer implements DocumentListener {
-
-    /**
-     * Key for accessing / storing a set of DocumentContentSynchronizers as custom user data on a Document.
-     * This set is identical to the set of DocumentContentSynchronizers that have been registered as DocumentListeners
-     * and should be kept in synch with the addition and removal of listeners. This otherwise redundant set provides
-     * clients of the Document with a method for retrieving the DocumentContentSynchronizers which cannot be accessed
-     * through the native Document API (that provides no getDocumentListeners() method).
-     */
-    public final static Key<Set<DocumentContentSynchronizer>> KEY = Key.create(DocumentContentSynchronizer.class.getName());
-
     private final static Logger LOGGER = LoggerFactory.getLogger(DocumentContentSynchronizer.class);
 
-    private final @Nonnull
-    LanguageServerWrapper languageServerWrapper;
-    private final @Nonnull
-    Document document;
-    private final @Nonnull
-    URI fileUri;
+    private final @NotNull LanguageServerWrapper languageServerWrapper;
+    private final @NotNull Document document;
+    private final @NotNull String fileUri;
     private final TextDocumentSyncKind syncKind;
 
     private int version = 0;
     private final List<TextDocumentContentChangeEvent> changeEvents;
     private long modificationStamp;
-    final @Nonnull
+    final @NotNull
     CompletableFuture<Void> didOpenFuture;
 
-    public DocumentContentSynchronizer(@Nonnull LanguageServerWrapper languageServerWrapper,
-                                       @Nonnull Document document,
+    public DocumentContentSynchronizer(@NotNull LanguageServerWrapper languageServerWrapper,
+                                       @NotNull URI fileUri,
+                                       @NotNull Document document,
                                        TextDocumentSyncKind syncKind) {
         this.languageServerWrapper = languageServerWrapper;
-        this.fileUri = LSPIJUtils.toUri(document);
+        this.fileUri = fileUri.toASCIIString();
         this.modificationStamp = -1;
         this.syncKind = syncKind != null ? syncKind : TextDocumentSyncKind.Full;
 
         this.document = document;
         // add a document buffer
         TextDocumentItem textDocument = new TextDocumentItem();
-        textDocument.setUri(fileUri.toString());
+        textDocument.setUri(this.fileUri);
         textDocument.setText(document.getText());
 
-        Language contentTypes = LSPIJUtils.getDocumentLanguage(this.document, languageServerWrapper.getProject());
+        Language contentTypes = LSPIJUtils.getDocumentLanguage(document, languageServerWrapper.getProject());
 
         String languageId = languageServerWrapper.getLanguageId(contentTypes);
 
@@ -101,7 +88,6 @@ public class DocumentContentSynchronizer implements DocumentListener {
         if (syncKind == TextDocumentSyncKind.None) {
             return;
         }
-        checkEvent(event);
         if (syncKind == TextDocumentSyncKind.Full) {
             synchronized (changeEvents) {
                 changeEvents.clear();
@@ -119,47 +105,20 @@ public class DocumentContentSynchronizer implements DocumentListener {
         }
     }
 
-    // REVISIT: Is there a better way to force diagnostics to be computed than sending a change event when there are no changes?
-    public void documentFullRefresh(Document document) {
-        if (syncKind == TextDocumentSyncKind.None) {
-            return;
-        }
-        checkDocument(document);
-
-        final TextDocumentContentChangeEvent changeEvent = new TextDocumentContentChangeEvent();
-        changeEvent.setText(document.getText());
-        final List<TextDocumentContentChangeEvent> events = Collections.singletonList(changeEvent);
-
-        if (ApplicationManager.getApplication().isUnitTestMode()) {
-            sendDidChangeEvents(events);
-        } else {
-            if(languageServerWrapper.getProject().isDisposed()) {
-                return;
-            }
-            PsiDocumentManager.getInstance(languageServerWrapper.getProject()).performForCommittedDocument(document, () -> sendDidChangeEvents(events));
-        }
-    }
-
     private void sendDidChangeEvents() {
         List<TextDocumentContentChangeEvent> events = null;
         synchronized (changeEvents) {
             events = new ArrayList<>(changeEvents);
             changeEvents.clear();
         }
-        sendDidChangeEvents(events);
-    }
-
-    private void sendDidChangeEvents(List<TextDocumentContentChangeEvent> events) {
         DidChangeTextDocumentParams changeParamsToSend = new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(), events);
         changeParamsToSend.getTextDocument().setUri(fileUri.toString());
         changeParamsToSend.getTextDocument().setVersion(++version);
-        languageServerWrapper.getInitializedServer()
-                .thenAcceptAsync(ls -> ls.getTextDocumentService().didChange(changeParamsToSend));
+        languageServerWrapper.sendNotification(ls -> ls.getTextDocumentService().didChange(changeParamsToSend));
     }
 
     @Override
     public void beforeDocumentChange(DocumentEvent event) {
-        checkEvent(event);
         if (syncKind == TextDocumentSyncKind.Incremental) {
             // this really needs to happen before event gets actually
             // applied, to properly compute positions
@@ -170,6 +129,7 @@ public class DocumentContentSynchronizer implements DocumentListener {
     }
 
     private TextDocumentContentChangeEvent createChangeEvent(DocumentEvent event) {
+        Document document = event.getDocument();
         TextDocumentSyncKind syncKind = getTextDocumentSyncKind();
         switch (syncKind) {
             case None:
@@ -202,8 +162,7 @@ public class DocumentContentSynchronizer implements DocumentListener {
         return null;
     }
 
-    public void documentSaved(long timestamp) {
-        this.modificationStamp = timestamp;
+    public void documentSaved() {
         ServerCapabilities serverCapabilities = languageServerWrapper.getServerCapabilities();
         if (serverCapabilities != null) {
             Either<TextDocumentSyncKind, TextDocumentSyncOptions> textDocumentSync = serverCapabilities.getTextDocumentSync();
@@ -221,7 +180,7 @@ public class DocumentContentSynchronizer implements DocumentListener {
         if (languageServerWrapper.isActive()) {
             TextDocumentIdentifier identifier = new TextDocumentIdentifier(fileUri.toString());
             DidCloseTextDocumentParams params = new DidCloseTextDocumentParams(identifier);
-            languageServerWrapper.getInitializedServer().thenAcceptAsync(ls -> ls.getTextDocumentService().didClose(params));
+            languageServerWrapper.sendNotification(ls -> ls.getTextDocumentService().didClose(params));
         }
     }
 

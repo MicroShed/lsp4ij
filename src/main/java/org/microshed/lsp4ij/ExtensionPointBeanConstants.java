@@ -15,17 +15,13 @@ public class ExtensionPointBeanConstants {
     private static String pluginNamespaceProperty = "pluginNamespace";
     private static ResourceBundle resourceBundle = null;
     private static String SERVER_EXT_NAME = ".server";
+    private static String SERVER_ICON_EXT_NAME = ".serverIconProvider";
     private static String LANGUAGE_MAPPING_EXT_NAME = ".languageMapping";
 
     private static String getNamespaceName() {
         if (resourceBundle == null) {
-            LOGGER.warning("resourceBundle == null");
-            LOGGER.warning("Meta="+new File("META-INF").exists());
-            LOGGER.warning("Meta Path="+new File("META-INF").getAbsolutePath());
             resourceBundle = ResourceBundle.getBundle(propertiesName, new Locale("en"));
-            LOGGER.warning("pluginNamespaceProperty1="+resourceBundle.getString(pluginNamespaceProperty));
         }
-        LOGGER.warning("pluginNamespaceProperty2="+resourceBundle.getString(pluginNamespaceProperty));
         if (resourceBundle.containsKey(pluginNamespaceProperty)) {
             return resourceBundle.getString(pluginNamespaceProperty);
         } else {
@@ -34,6 +30,10 @@ public class ExtensionPointBeanConstants {
     }
     public static String getServerExtensionName() {
         return getNamespaceName() + SERVER_EXT_NAME;
+    }
+
+    public static String getServerIconExtensionName() {
+        return getNamespaceName() + SERVER_ICON_EXT_NAME;
     }
 
     public static String getLanguageMappingExtensionName() {
