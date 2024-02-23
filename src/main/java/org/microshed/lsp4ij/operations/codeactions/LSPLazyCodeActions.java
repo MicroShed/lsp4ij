@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2023 Red Hat Inc. and others.
+ * Copyright (c) 2023, 2024 Red Hat Inc. and others.
  *
  * This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v. 2.0 which is available at
@@ -16,16 +16,17 @@ package org.microshed.lsp4ij.operations.codeactions;
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.openapi.application.ReadAction;
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
-import org.microshed.lsp4ij.CompletableFutures;
-import org.microshed.lsp4ij.LSPIJUtils;
-import org.microshed.lsp4ij.LanguageServerWrapper;
 import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.jetbrains.annotations.Nullable;
+import org.microshed.lsp4ij.CompletableFutures;
+import org.microshed.lsp4ij.LSPIJUtils;
+import org.microshed.lsp4ij.LanguageServerWrapper;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -33,8 +34,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.ExecutionException;
 
 /**
  * This class returns 10 IJ {@link LSPLazyCodeActionIntentionAction} which does nothing. It loads the LSP code actions
@@ -122,13 +122,14 @@ public class LSPLazyCodeActions {
 			// Create LSP textDocument/codeAction request
 			lspCodeActionRequest = loadCodeActionsFor(diagnostic);
 		}
-		// Get the response of the LSP textDocument/codeAction request with TimeOut.
+		// Get the response of the LSP textDocument/codeAction request.
 		List<Either<Command, CodeAction>> codeActions = null;
 		try {
-			codeActions = lspCodeActionRequest.get(LSP_REQUEST_CODEACTION_TIMEOUT, TimeUnit.MILLISECONDS);
-		} catch (TimeoutException e) {
+			CompletableFutures.waitUntilDone(lspCodeActionRequest);
+			codeActions = lspCodeActionRequest.getNow(null);
+		} catch(ProcessCanceledException e) {
 			refreshValidation = true;
-		} catch (Exception e) {
+		} catch (ExecutionException e) {
 			// Do nothing
 		}
 		return codeActions;
