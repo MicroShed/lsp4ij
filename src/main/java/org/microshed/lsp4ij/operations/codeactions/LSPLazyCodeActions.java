@@ -36,6 +36,9 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
+import static org.microshed.lsp4ij.CompletableFutures.isDoneNormally;
+import static org.microshed.lsp4ij.CompletableFutures.waitUntilDone;
+
 /**
  * This class returns 10 IJ {@link LSPLazyCodeActionIntentionAction} which does nothing. It loads the LSP code actions
  * for the given diagnostic only when user triggers the quick fixes for the diagnostic.
@@ -125,8 +128,10 @@ public class LSPLazyCodeActions {
 		// Get the response of the LSP textDocument/codeAction request.
 		List<Either<Command, CodeAction>> codeActions = null;
 		try {
-			CompletableFutures.waitUntilDone(lspCodeActionRequest);
-			codeActions = lspCodeActionRequest.getNow(null);
+			waitUntilDone(lspCodeActionRequest);
+			if (isDoneNormally(lspCodeActionRequest)) {
+				codeActions = lspCodeActionRequest.getNow(null);
+			}
 		} catch(ProcessCanceledException e) {
 			refreshValidation = true;
 		} catch (ExecutionException e) {
