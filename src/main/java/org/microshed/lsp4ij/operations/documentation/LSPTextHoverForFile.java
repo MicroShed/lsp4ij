@@ -55,7 +55,7 @@ public class LSPTextHoverForFile implements Disposable {
         initiateHoverRequest(element, targetOffset);
         try {
             List<MarkupContent> result = lspRequest
-                    .get(500, TimeUnit.MILLISECONDS).stream()
+                    .get(5000, TimeUnit.MILLISECONDS).stream()
                     .filter(Objects::nonNull)
                     .map(LSPTextHoverForFile::getHoverString)
                     .filter(Objects::nonNull)
