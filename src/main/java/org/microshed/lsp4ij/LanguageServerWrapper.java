@@ -15,11 +15,11 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.intellij.lang.Language;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.application.ApplicationInfo;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
+import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.vfs.*;
@@ -30,6 +30,7 @@ import org.microshed.lsp4ij.internal.SupportedFeatures;
 import org.microshed.lsp4ij.lifecycle.LanguageServerLifecycleManager;
 import org.microshed.lsp4ij.lifecycle.NullLanguageServerLifecycleManager;
 import org.microshed.lsp4ij.server.*;
+import org.microshed.lsp4ij.server.definition.LanguageServerDefinition;
 import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.Launcher;
 import org.eclipse.lsp4j.jsonrpc.MessageConsumer;
@@ -50,13 +51,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
+import static org.microshed.lsp4ij.internal.IntelliJPlatformUtils.getClientInfo;
+
 /**
  * Language server wrapper.
  */
 public class LanguageServerWrapper implements Disposable {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(LanguageServerWrapper.class);//$NON-NLS-1$
-    private static final String CLIENT_NAME = "IntelliJ";
+    private static final Logger LOGGER = LoggerFactory.getLogger(LanguageServerWrapper.class);
+
     private static final int MAX_NUMBER_OF_RESTART_ATTEMPTS = 20; // TODO move this max value in settings
 
     class Listener implements FileEditorManagerListener, VirtualFileListener {
@@ -163,7 +166,7 @@ public class LanguageServerWrapper implements Disposable {
     private MessageBusConnection messageBusConnection;
 
     @NotNull
-    public final LanguageServersRegistry.LanguageServerDefinition serverDefinition;
+    private final LanguageServerDefinition serverDefinition;
     @Nullable
     protected final Project initialProject;
     @NotNull
@@ -205,32 +208,32 @@ public class LanguageServerWrapper implements Disposable {
     private boolean initiallySupportsWorkspaceFolders = false;
 
     /* Backwards compatible constructor */
-    public LanguageServerWrapper(@NotNull Project project, @NotNull LanguageServersRegistry.LanguageServerDefinition serverDefinition) {
+    public LanguageServerWrapper(@NotNull Project project, @NotNull LanguageServerDefinition serverDefinition) {
         this(project, serverDefinition, null);
     }
 
-    public LanguageServerWrapper(@NotNull LanguageServersRegistry.LanguageServerDefinition serverDefinition, @Nullable URI initialPath) {
+    public LanguageServerWrapper(@NotNull LanguageServerDefinition serverDefinition, @Nullable URI initialPath) {
         this(null, serverDefinition, initialPath);
     }
 
     /**
      * Unified private constructor to set sensible defaults in all cases
      */
-    private LanguageServerWrapper(@Nullable Project project, @NotNull LanguageServersRegistry.LanguageServerDefinition serverDefinition,
+    private LanguageServerWrapper(@Nullable Project project, @NotNull LanguageServerDefinition serverDefinition,
                                   @Nullable URI initialPath) {
         this.initialProject = project;
         this.initialPath = initialPath;
         this.serverDefinition = serverDefinition;
         this.connectedDocuments = new HashMap<>();
-        String projectName = sanitize((project != null && project.getName() != null && !serverDefinition.isSingleton) ? ("@" + project.getName()) : "");  //$NON-NLS-1$//$NON-NLS-2$
-        String dispatcherThreadNameFormat ="LS-" + serverDefinition.id + projectName + "#dispatcher"; //$NON-NLS-1$ //$NON-NLS-2$
+        String projectName = sanitize((project != null && project.getName() != null && !serverDefinition.isSingleton()) ? ("@" + project.getName()) : "");  //$NON-NLS-1$//$NON-NLS-2$
+        String dispatcherThreadNameFormat = "LS-" + serverDefinition.getId() + projectName + "#dispatcher"; //$NON-NLS-1$ //$NON-NLS-2$
         this.dispatcher = Executors
                 .newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat(dispatcherThreadNameFormat).build());
 
         // Executor service passed through to the LSP4j layer when we attempt to start the LS. It will be used
         // to create a listener that sits on the input stream and processes inbound messages (responses, or server-initiated
         // requests).
-        String listenerThreadNameFormat = "LS-" + serverDefinition.id + projectName + "#listener-%d"; //$NON-NLS-1$ //$NON-NLS-2$
+        String listenerThreadNameFormat = "LS-" + serverDefinition.getId() + projectName + "#listener-%d"; //$NON-NLS-1$ //$NON-NLS-2$
         this.listener = Executors
                 .newCachedThreadPool(new ThreadFactoryBuilder().setNameFormat(listenerThreadNameFormat).build());
         udateStatus(ServerStatus.none);
@@ -246,7 +249,7 @@ public class LanguageServerWrapper implements Disposable {
      * Removes '%' from the given name
      */
     private static String sanitize(String name) {
-        return name.replace("%","");
+        return name.replace("%", "");
     }
 
     public Project getProject() {
@@ -339,7 +342,7 @@ public class LanguageServerWrapper implements Disposable {
                         }
 
                         // Throws the CannotStartProcessException exception if process is not alive.
-                        // This usecase comes for instance when the start process command fails (not a valid start command)
+                        // This use case comes for instance when the start process command fails (not a valid start command)
                         lspStreamProvider.ensureIsAlive();
                         return null;
                     }).thenRun(() -> {
@@ -412,7 +415,7 @@ public class LanguageServerWrapper implements Disposable {
                         if (e instanceof CannotStartProcessException) {
                             serverError = (CannotStartProcessException) e;
                         } else {
-                            serverError = new CannotStartServerException("Error while starting language server '" + serverDefinition.id + "' (pid=" + getCurrentProcessId() + ")", e);
+                            serverError = new CannotStartServerException("Error while starting language server '" + serverDefinition.getId() + "' (pid=" + getCurrentProcessId() + ")", e);
                         }
                         initializeFuture.completeExceptionally(serverError);
                         getLanguageServerLifecycleManager().onError(this, e);
@@ -443,15 +446,6 @@ public class LanguageServerWrapper implements Disposable {
 
         // no then...Async future here as we want this chain of operation to be sequential and "atomic"-ish
         return languageServer.initialize(initParams);
-    }
-
-    private ClientInfo getClientInfo() {
-        ApplicationInfo applicationInfo = ApplicationInfo.getInstance();
-        String versionName = applicationInfo.getVersionName();
-        String buildNumber = applicationInfo.getBuild().asString();
-
-        String intellijVersion = versionName + " (build " + buildNumber + ")";
-        return new ClientInfo(CLIENT_NAME, intellijVersion);
     }
 
     @Nullable
@@ -508,10 +502,10 @@ public class LanguageServerWrapper implements Disposable {
                     stop();
                 } catch (Throwable t) {
                     //Need to catch time task exceptions, or it will cancel the timer
-                    LOGGER.error("Failed to stop language server "+LanguageServerWrapper.this.serverDefinition.id, t);
+                    LOGGER.error("Failed to stop language server " + LanguageServerWrapper.this.serverDefinition.getId(), t);
                 }
             }
-        }, TimeUnit.SECONDS.toMillis(this.serverDefinition.lastDocumentDisconnectedTimeout));
+        }, TimeUnit.SECONDS.toMillis(this.serverDefinition.getLastDocumentDisconnectedTimeout()));
     }
 
     /**
@@ -640,11 +634,11 @@ public class LanguageServerWrapper implements Disposable {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         } catch (TimeoutException ex) {
-            String message = "Timeout error while shutdown the language server '" + serverDefinition.id + "'";
+            String message = "Timeout error while shutdown the language server '" + serverDefinition.getId() + "'";
             LOGGER.warn(message, ex);
             throw new Exception(message, ex);
         } catch (Exception ex) {
-            String message = "Error while shutdown the language server '" + serverDefinition.id + "'";
+            String message = "Error while shutdown the language server '" + serverDefinition.getId() + "'";
             LOGGER.warn(message, ex);
             throw new Exception(message, ex);
         }
@@ -654,7 +648,7 @@ public class LanguageServerWrapper implements Disposable {
         try {
             languageServerInstance.exit();
         } catch (Exception ex) {
-            String message = "Error while exit the language server '" + serverDefinition.id + "'";
+            String message = "Error while exit the language server '" + serverDefinition.getId() + "'";
             LOGGER.error(message, ex);
             throw new Exception(message, ex);
         }
@@ -686,7 +680,7 @@ public class LanguageServerWrapper implements Disposable {
             return true;
         }
 
-        return serverDefinition.isSingleton;
+        return serverDefinition.isSingleton();
     }
 
     /**
@@ -746,12 +740,11 @@ public class LanguageServerWrapper implements Disposable {
         if (data != null) {
             // Remove the listener from the old document stored in synchronizer
             DocumentContentSynchronizer synchronizer = data.getSynchronizer();
-            final Document document = synchronizer.getDocument();
-            document.removeDocumentListener(synchronizer);
+            synchronizer.getDocument().removeDocumentListener(synchronizer);
             synchronizer.documentClosed();
         }
         if (stopIfNoOpenedFiles && this.connectedDocuments.isEmpty()) {
-            if (this.serverDefinition.lastDocumentDisconnectedTimeout != 0 && !ApplicationManager.getApplication().isUnitTestMode()) {
+            if (this.serverDefinition.getLastDocumentDisconnectedTimeout() != 0 && !ApplicationManager.getApplication().isUnitTestMode()) {
                 removeStopTimer(true);
                 startStopTimer();
             } else {
@@ -769,8 +762,23 @@ public class LanguageServerWrapper implements Disposable {
         return connectedDocuments.containsKey(location);
     }
 
+    /**
+     * Returns the LSP file data coming from this language server for the given file uri.
+     *
+     * @param fileUri the file Uri.
+     * @return the LSP file data coming from this language server for the given file uri.
+     */
     public @Nullable LSPVirtualFileData getLSPVirtualFileData(URI fileUri) {
         return connectedDocuments.get(fileUri);
+    }
+
+    /**
+     * Returns all LSP files connected to this language server.
+     *
+     * @return all LSP files connected to this language server.
+     */
+    public Collection<LSPVirtualFileData> getConnectedFiles() {
+        return Collections.unmodifiableCollection(connectedDocuments.values());
     }
 
     /**
@@ -861,18 +869,39 @@ public class LanguageServerWrapper implements Disposable {
 
     /**
      * @return The language ID that this wrapper is dealing with if defined in the
-     * content type mapping for the language server
+     * language mapping for the language server
      */
     @Nullable
-    public String getLanguageId(Language language) {
+    public String getLanguageId(@Nullable Language language) {
         while (language != null) {
-            String languageId = serverDefinition.languageIdMappings.get(language);
+            String languageId = serverDefinition.getLanguageId(language);
             if (languageId != null) {
                 return languageId;
             }
             language = language.getBaseLanguage();
         }
         return null;
+    }
+
+    /**
+     * @return The language ID that this wrapper is dealing with if defined in the
+     * file type mapping for the language server
+     */
+    @Nullable
+    public String getLanguageId(@Nullable FileType fileType) {
+        if (fileType == null) {
+            return null;
+        }
+        return serverDefinition.getLanguageId(fileType);
+    }
+
+    /**
+     * @return The language ID that this wrapper is dealing with if defined in the
+     * file type mapping for the language server
+     */
+    @Nullable
+    public String getLanguageId(@NotNull String filename) {
+        return serverDefinition.getLanguageId(filename);
     }
 
     public void registerCapability(RegistrationParams params) {
@@ -1021,7 +1050,7 @@ public class LanguageServerWrapper implements Disposable {
         if (file != null && file.exists()) {
             return true;
         }
-        return serverDefinition.isSingleton;
+        return serverDefinition.isSingleton();
     }
 
     private LanguageServerLifecycleManager getLanguageServerLifecycleManager() {
@@ -1077,5 +1106,14 @@ public class LanguageServerWrapper implements Disposable {
 
     public int getMaxNumberOfRestartAttempts() {
         return MAX_NUMBER_OF_RESTART_ATTEMPTS;
+    }
+
+    /**
+     * Returns the language server definition.
+     * @return the language server definition.
+     */
+    @NotNull
+    public LanguageServerDefinition getServerDefinition() {
+        return serverDefinition;
     }
 }

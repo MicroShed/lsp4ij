@@ -13,7 +13,7 @@
  *******************************************************************************/
 package org.microshed.lsp4ij.console.explorer;
 
-import org.microshed.lsp4ij.LanguageServersRegistry;
+import org.microshed.lsp4ij.server.definition.LanguageServerDefinition;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -23,13 +23,13 @@ import javax.swing.tree.DefaultMutableTreeNode;
  */
 public class LanguageServerTreeNode extends DefaultMutableTreeNode {
 
-    private final LanguageServersRegistry.LanguageServerDefinition serverDefinition;
+    private final LanguageServerDefinition serverDefinition;
 
-    public LanguageServerTreeNode(LanguageServersRegistry.LanguageServerDefinition serverDefinition) {
+    public LanguageServerTreeNode(LanguageServerDefinition serverDefinition) {
         this.serverDefinition = serverDefinition;
     }
 
-    public LanguageServersRegistry.LanguageServerDefinition getServerDefinition() {
+    public LanguageServerDefinition getServerDefinition() {
         return serverDefinition;
     }
 
@@ -41,8 +41,7 @@ public class LanguageServerTreeNode extends DefaultMutableTreeNode {
     }
 
     public Icon getIcon() {
-        String serverId = getServerDefinition().id;
-        return LanguageServersRegistry.getInstance().getServerIcon(serverId);
+        return serverDefinition.getIcon();
     }
 
     public String getDisplayName() {

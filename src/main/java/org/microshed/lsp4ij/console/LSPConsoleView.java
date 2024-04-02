@@ -20,9 +20,9 @@ import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.editor.actions.ScrollToTheEndToolbarAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.search.GlobalSearchScope;
-import org.microshed.lsp4ij.LanguageServersRegistry;
 import org.microshed.lsp4ij.console.actions.AutoFoldingAction;
 import org.microshed.lsp4ij.console.actions.ClearThisConsoleAction;
+import org.microshed.lsp4ij.server.definition.LanguageServerDefinition;
 import org.microshed.lsp4ij.settings.ServerTrace;
 import org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings;
 import org.jetbrains.annotations.NotNull;
@@ -35,9 +35,9 @@ import java.util.List;
  */
 public class LSPConsoleView extends ConsoleViewImpl {
 
-    private final LanguageServersRegistry.LanguageServerDefinition serverDefinition;
+    private final LanguageServerDefinition serverDefinition;
 
-    public LSPConsoleView(@NotNull LanguageServersRegistry.LanguageServerDefinition serverDefinition, @NotNull Project project,
+    public LSPConsoleView(@NotNull LanguageServerDefinition serverDefinition, @NotNull Project project,
                           @NotNull GlobalSearchScope searchScope,
                           boolean viewer,
                           boolean usePredefinedMessageFilter) {
@@ -107,7 +107,7 @@ public class LSPConsoleView extends ConsoleViewImpl {
      * @return true if language server settings is configured with "verbose" level trace for the language server and false otherwise.
      */
     private boolean canApplyFolding() {
-        UserDefinedLanguageServerSettings.LanguageServerDefinitionSettings settings = UserDefinedLanguageServerSettings.getInstance(getProject()).getLanguageServerSettings(serverDefinition.id);
+        UserDefinedLanguageServerSettings.LanguageServerDefinitionSettings settings = UserDefinedLanguageServerSettings.getInstance(getProject()).getLanguageServerSettings(serverDefinition.getId());
         if (settings == null) {
             return false;
         }

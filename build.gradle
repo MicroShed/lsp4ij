@@ -6,7 +6,7 @@ plugins {
 }
 
 group 'org.microshed'
-version '0.0.4'
+version '0.0.5'
 
 sourceCompatibility = 17
 targetCompatibility = 17
@@ -93,7 +93,7 @@ jar {
 
 intellij {
     // For a full list of IntelliJ IDEA releases please see https://www.jetbrains.com/intellij-repository/releases
-    version = '2022.2'
+    version = '2023.1'
     updateSinceUntilBuild = false
     plugins = ['java', 'gradle-java', 'com.intellij.gradle']
 }

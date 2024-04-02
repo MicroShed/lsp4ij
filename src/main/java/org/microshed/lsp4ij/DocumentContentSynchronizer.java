@@ -1,3 +1,13 @@
+/*******************************************************************************
+ * Copyright (c) 2019 Red Hat, Inc.
+ * Distributed under license by Red Hat, Inc. All rights reserved.
+ * This program is made available under the terms of the
+ * Eclipse Public License v2.0 which accompanies this distribution,
+ * and is available at https://www.eclipse.org/legal/epl-v20.html
+ *
+ * Contributors:
+ * Red Hat, Inc. - initial API and implementation
+ ******************************************************************************/
 package org.microshed.lsp4ij;
 
 import com.intellij.lang.Language;
@@ -6,34 +16,25 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
+import com.intellij.openapi.fileTypes.FileType;
+import com.intellij.openapi.fileTypes.FileTypes;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
-import org.eclipse.lsp4j.DidChangeTextDocumentParams;
-import org.eclipse.lsp4j.DidCloseTextDocumentParams;
-import org.eclipse.lsp4j.DidOpenTextDocumentParams;
-import org.eclipse.lsp4j.DidSaveTextDocumentParams;
-import org.eclipse.lsp4j.Range;
-import org.eclipse.lsp4j.ServerCapabilities;
-import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
-import org.eclipse.lsp4j.TextDocumentIdentifier;
-import org.eclipse.lsp4j.TextDocumentItem;
-import org.eclipse.lsp4j.TextDocumentSyncKind;
-import org.eclipse.lsp4j.TextDocumentSyncOptions;
-import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
+import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Synchronize IntelliJ document (open, content changed, close, save)
+ * with LSP notifications (didOpen, didChanged, didClose, didSave).
+ */
 public class DocumentContentSynchronizer implements DocumentListener {
-    private final static Logger LOGGER = LoggerFactory.getLogger(DocumentContentSynchronizer.class);
 
     private final @NotNull LanguageServerWrapper languageServerWrapper;
     private final @NotNull Document document;
@@ -42,7 +43,6 @@ public class DocumentContentSynchronizer implements DocumentListener {
 
     private int version = 0;
     private final List<TextDocumentContentChangeEvent> changeEvents;
-    private long modificationStamp;
     final @NotNull
     CompletableFuture<Void> didOpenFuture;
 
@@ -52,7 +52,6 @@ public class DocumentContentSynchronizer implements DocumentListener {
                                        TextDocumentSyncKind syncKind) {
         this.languageServerWrapper = languageServerWrapper;
         this.fileUri = fileUri.toASCIIString();
-        this.modificationStamp = -1;
         this.syncKind = syncKind != null ? syncKind : TextDocumentSyncKind.Full;
 
         this.document = document;
@@ -61,30 +60,69 @@ public class DocumentContentSynchronizer implements DocumentListener {
         textDocument.setUri(this.fileUri);
         textDocument.setText(document.getText());
 
-        Language contentTypes = LSPIJUtils.getDocumentLanguage(document, languageServerWrapper.getProject());
-
-        String languageId = languageServerWrapper.getLanguageId(contentTypes);
-
-        //TODO: determine languageId more precisely
-        /*IPath fromPortableString = Path.fromPortableString(this.fileUri.getPath());
-        if (languageId == null) {
-            languageId = fromPortableString.getFileExtension();
-            if (languageId == null) {
-                languageId = fromPortableString.lastSegment();
-            }
-        }*/
-
+        @NotNull String languageId = getLanguageId(document, languageServerWrapper);
         textDocument.setLanguageId(languageId);
         textDocument.setVersion(++version);
-        didOpenFuture = languageServerWrapper.getInitializedServer()
-                .thenAcceptAsync(ls -> ls.getTextDocumentService().didOpen(new DidOpenTextDocumentParams(textDocument)));
+        didOpenFuture = languageServerWrapper
+                .getInitializedServer()
+                .thenAcceptAsync(ls -> ls.getTextDocumentService()
+                        .didOpen(new DidOpenTextDocumentParams(textDocument)));
 
         // Initialize LSP change events
         changeEvents = new ArrayList<>();
     }
 
+    /**
+     * Returns the LSP language id defined in mapping otherwise the {@link Language#getID()} otherwise the {@link FileType#getName()} otherwise 'unknown'.
+     *
+     * @param document       the document.
+     * @param languageServer the language server.
+     * @return the LSP language id.
+     */
+    private static @NotNull String getLanguageId(@NotNull Document document, @NotNull LanguageServerWrapper languageServer) {
+        VirtualFile file = FileDocumentManager.getInstance().getFile(document);
+        if (file == null) {
+            return FileTypes.UNKNOWN.getName().toLowerCase();
+        }
+
+        Project project = languageServer.getProject();
+
+        // 1. Try to get the LSP languageId by using language mapping
+        Language language = project != null ? LSPIJUtils.getFileLanguage(file, project) : null;
+        String languageId = languageServer.getLanguageId(language);
+        if (languageId != null) {
+            return languageId;
+        }
+
+        // 2. Try to get the LSP languageId by using the fileType mapping
+        FileType fileType = file.getFileType();
+        languageId = languageServer.getLanguageId(fileType);
+        if (languageId != null) {
+            return languageId;
+        }
+
+        // 3. Try to get the LSP languageId by using the file name pattern mapping
+        languageId = languageServer.getLanguageId(file.getName());
+        if (languageId != null) {
+            return languageId;
+        }
+
+        // At this step there is no mapping
+
+        // We return the language Id if it exists or file type name
+        // with 'lower case' to try to map the recommended languageId specified at
+        // https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentItem
+        if (language != null) {
+            // The language exists, use its ID with lower case
+            return language.getID().toLowerCase();
+        }
+        // Returns the existing file type or 'unknown' with lower case
+        return file.getName().toLowerCase();
+    }
+
     @Override
-    public void documentChanged(DocumentEvent event) {
+    public void documentChanged(@NotNull DocumentEvent event) {
+        DocumentListener.super.documentChanged(event);
         if (syncKind == TextDocumentSyncKind.None) {
             return;
         }
@@ -98,27 +136,33 @@ public class DocumentContentSynchronizer implements DocumentListener {
         if (ApplicationManager.getApplication().isUnitTestMode()) {
             sendDidChangeEvents();
         } else {
-            if(languageServerWrapper.getProject().isDisposed()) {
-                return;
+            Project project = languageServerWrapper.getProject();
+            if (project != null) {
+                PsiDocumentManager.getInstance(project)
+                        .performForCommittedDocument(event.getDocument(), this::sendDidChangeEvents);
             }
-            PsiDocumentManager.getInstance(languageServerWrapper.getProject()).performForCommittedDocument(event.getDocument(), this::sendDidChangeEvents);
         }
     }
 
     private void sendDidChangeEvents() {
-        List<TextDocumentContentChangeEvent> events = null;
+        List<TextDocumentContentChangeEvent> events;
         synchronized (changeEvents) {
+            if (changeEvents.isEmpty()) {
+                // Don't send didChange notification with empty contentChanges.
+                return;
+            }
             events = new ArrayList<>(changeEvents);
             changeEvents.clear();
         }
+
         DidChangeTextDocumentParams changeParamsToSend = new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(), events);
-        changeParamsToSend.getTextDocument().setUri(fileUri.toString());
+        changeParamsToSend.getTextDocument().setUri(fileUri);
         changeParamsToSend.getTextDocument().setVersion(++version);
         languageServerWrapper.sendNotification(ls -> ls.getTextDocumentService().didChange(changeParamsToSend));
     }
 
     @Override
-    public void beforeDocumentChange(DocumentEvent event) {
+    public void beforeDocumentChange(@NotNull DocumentEvent event) {
         if (syncKind == TextDocumentSyncKind.Incremental) {
             // this really needs to happen before event gets actually
             // applied, to properly compute positions
@@ -170,7 +214,7 @@ public class DocumentContentSynchronizer implements DocumentListener {
                 return;
             }
         }
-        TextDocumentIdentifier identifier = new TextDocumentIdentifier(fileUri.toString());
+        TextDocumentIdentifier identifier = new TextDocumentIdentifier(fileUri);
         DidSaveTextDocumentParams params = new DidSaveTextDocumentParams(identifier, document.getText());
         languageServerWrapper.getInitializedServer().thenAcceptAsync(ls -> ls.getTextDocumentService().didSave(params));
     }
@@ -178,7 +222,7 @@ public class DocumentContentSynchronizer implements DocumentListener {
     public void documentClosed() {
         // When LS is shut down all documents are being disconnected. No need to send "didClose" message to the LS that is being shut down or not yet started
         if (languageServerWrapper.isActive()) {
-            TextDocumentIdentifier identifier = new TextDocumentIdentifier(fileUri.toString());
+            TextDocumentIdentifier identifier = new TextDocumentIdentifier(fileUri);
             DidCloseTextDocumentParams params = new DidCloseTextDocumentParams(identifier);
             languageServerWrapper.sendNotification(ls -> ls.getTextDocumentService().didClose(params));
         }
@@ -193,36 +237,22 @@ public class DocumentContentSynchronizer implements DocumentListener {
         return syncKind;
     }
 
-    protected long getModificationStamp() {
-        return modificationStamp;
-    }
-
-    public Document getDocument() {
+    /**
+     * Returns the document.
+     *
+     * @return the document.
+     */
+    public @NotNull Document getDocument() {
         return this.document;
     }
 
+    /**
+     * Returns the current version of the LSP {@link TextDocumentItem}.
+     *
+     * @return the current version of the LSP {@link TextDocumentItem}.
+     */
     int getVersion() {
         return version;
-    }
-
-    private void logDocument(String header, Document document) {
-        LOGGER.warn(header + " text='" + document.getText());
-        VirtualFile file = FileDocumentManager.getInstance().getFile(document);
-        if (file != null) {
-            LOGGER.warn(header + " file=" + file);
-        }
-    }
-
-    private void checkEvent(DocumentEvent event) {
-        checkDocument(event.getDocument());
-    }
-
-    private void checkDocument(Document eventDocument) {
-        if (this.document != eventDocument) {
-            logDocument("Listener document", this.document);
-            logDocument("Event document", eventDocument);
-            throw new IllegalStateException("Synchronizer should apply to only a single document, which is the one it was instantiated for"); //$NON-NLS-1$
-        }
     }
 
 }

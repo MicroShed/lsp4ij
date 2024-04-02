@@ -13,52 +13,283 @@
  *******************************************************************************/
 package org.microshed.lsp4ij.settings;
 
+import com.intellij.lang.Language;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.ui.ComboBox;
+import com.intellij.openapi.fileTypes.FileNameMatcher;
+import com.intellij.openapi.fileTypes.FileType;
+import com.intellij.openapi.project.Project;
 import com.intellij.ui.IdeBorderFactory;
-import com.intellij.ui.PortField;
-import com.intellij.ui.components.JBCheckBox;
 import com.intellij.util.ui.FormBuilder;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UI;
-import org.microshed.lsp4ij.LanguageServerBundle;
 import org.microshed.lsp4ij.LanguageServersRegistry;
+import org.microshed.lsp4ij.internal.StringUtils;
+import org.microshed.lsp4ij.launching.ServerMappingSettings;
+import org.microshed.lsp4ij.launching.UserDefinedLanguageServerSettings;
+import org.microshed.lsp4ij.server.definition.LanguageServerDefinition;
+import org.microshed.lsp4ij.server.definition.LanguageServerFileAssociation;
+import org.microshed.lsp4ij.server.definition.launching.UserDefinedLanguageServerDefinition;
+import org.microshed.lsp4ij.settings.ui.LanguageServerPanel;
+import org.microshed.lsp4ij.settings.ui.ServerMappingsPanel;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * UI settings view to configure a given language server:
  *
  * <ul>
+ *     <li>Report language server error kind (None, In Notification, In Log)</li>
+ *     <li>Server trace</li>
  *     <li>Debug port</li>
  *     <li>Suspend and wait for a debugger?</li>
  * </ul>
  */
 public class LanguageServerView implements Disposable {
 
-    private final JPanel myMainPanel;
-    private final PortField debugPortField = new PortField();
-    private final JBCheckBox debugSuspendCheckBox = new JBCheckBox(LanguageServerBundle.message("language.server.debug.suspend"));
-    private final ComboBox<ServerTrace> serverTraceComboBox = new ComboBox<>(new DefaultComboBoxModel<>(ServerTrace.values()));
+    private final LanguageServerNameProvider languageServerNameProvider;
 
-    public LanguageServerView(LanguageServersRegistry.LanguageServerDefinition languageServerDefinition) {
-        JComponent descriptionPanel = createDescription(languageServerDefinition.description.trim());
-        JPanel settingsPanel = createSettings(descriptionPanel);
-        TitledBorder title = IdeBorderFactory.createTitledBorder(languageServerDefinition.getDisplayName());
-        settingsPanel.setBorder(title);
+    public interface LanguageServerNameProvider {
+        String getDisplayName();
+    }
+
+    private final JPanel myMainPanel;
+    private final LanguageServerDefinition languageServerDefinition;
+    private final Project project;
+
+    private LanguageServerPanel languageServerPanel;
+
+    private ServerMappingsPanel mappingPanel;
+
+    public LanguageServerView(@NotNull LanguageServerDefinition languageServerDefinition,
+                              @Nullable LanguageServerNameProvider languageServerNameProvider,
+                              @NotNull Project project
+    ) {
+        this.languageServerDefinition = languageServerDefinition;
+        this.languageServerNameProvider = languageServerNameProvider;
+        this.project = project;
+        boolean isLaunchConfiguration = languageServerDefinition instanceof UserDefinedLanguageServerDefinition;
+        JComponent descriptionPanel = createDescription(languageServerDefinition.getDescription());
+        JPanel settingsPanel = createSettings(descriptionPanel, isLaunchConfiguration);
+        if (!isLaunchConfiguration) {
+            TitledBorder title = IdeBorderFactory.createTitledBorder(languageServerDefinition.getDisplayName());
+            settingsPanel.setBorder(title);
+        }
         JPanel wrapper = JBUI.Panels.simplePanel(settingsPanel);
         wrapper.setBorder(JBUI.Borders.emptyLeft(10));
         this.myMainPanel = wrapper;
     }
 
-    private JPanel createSettings(JComponent description) {
-        return FormBuilder.createFormBuilder()
-                .addComponent(description, 0)
-                .addLabeledComponent(LanguageServerBundle.message("language.server.debug.port"), debugPortField, 5)
-                .addComponent(debugSuspendCheckBox, 5)
-                .addLabeledComponent(LanguageServerBundle.message("language.server.trace"), serverTraceComboBox, 5)
-                .addComponentFillVertically(new JPanel(), 0)
+    /**
+     * Returns true if there are some modification in the UI fields and false otherwise.
+     *
+     * @return true if there are some modification in the UI fields and false otherwise.
+     */
+    public boolean isModified() {
+        String languageServerId = languageServerDefinition.getId();
+        if (languageServerDefinition instanceof UserDefinedLanguageServerDefinition) {
+            org.microshed.lsp4ij.launching.UserDefinedLanguageServerSettings.UserDefinedLanguageServerItemSettings settings = org.microshed.lsp4ij.launching.UserDefinedLanguageServerSettings.getInstance().getLaunchConfigSettings(languageServerId);
+            if (settings == null) {
+                return true;
+            }
+            if (!(isEquals(getDisplayName(), settings.getServerName())
+                    && isEquals(this.getCommandLine(), settings.getCommandLine())
+                    && Objects.equals(this.getMappings(), settings.getMappings())
+                    && isEquals(this.getConfigurationContent(), settings.getConfigurationContent())
+                    && isEquals(this.getInitializationOptionsContent(), settings.getInitializationOptionsContent()))) {
+                return true;
+            }
+        }
+        org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings.LanguageServerDefinitionSettings settings = org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings.getInstance(project)
+                .getLanguageServerSettings(languageServerId);
+        if (settings == null) {
+            // There is no settings, check if the view is filled with default value
+            return !(!this.isDebugSuspend()
+                    && StringUtils.isEmpty(this.getDebugPort())
+                    && isEquals(this.getServerTrace(), ServerTrace.getDefaultValue())
+                    && isEquals(this.getReportErrorKind(), ErrorReportingKind.getDefaultValue()));
+        }
+        if (!(languageServerDefinition instanceof UserDefinedLanguageServerDefinition)) {
+            if (!(isEquals(this.getDebugPort(), settings.getDebugPort())
+                    && this.isDebugSuspend() == settings.isDebugSuspend())) {
+                return true;
+            }
+        }
+        return !(isEquals(this.getServerTrace(), settings.getServerTrace()) &&
+                isEquals(this.getReportErrorKind(), settings.getErrorReportingKind()));
+    }
+
+    static boolean isEquals(String s1, String s2) {
+        // the comparison between null and "" should return true
+        s1 = s1 == null ? "" : s1;
+        s2 = s2 == null ? "" : s2;
+        return Objects.equals(s1, s2);
+    }
+
+    static boolean isEquals(ServerTrace st1, ServerTrace st2) {
+        // the comparison between null and default value trace should return true
+        st1 = st1 == null ? ServerTrace.getDefaultValue() : st1;
+        st2 = st2 == null ? ServerTrace.getDefaultValue() : st2;
+        return Objects.equals(st1, st2);
+    }
+
+    static boolean isEquals(ErrorReportingKind k1, ErrorReportingKind k2) {
+        // the comparison between null and default value error reporting kind should return true
+        k1 = k1 == null ? ErrorReportingKind.getDefaultValue() : k1;
+        k2 = k2 == null ? ErrorReportingKind.getDefaultValue() : k2;
+        return Objects.equals(k1, k2);
+    }
+
+    /**
+     * Update the UI from the registered language server definition + settings.
+     */
+    public void reset() {
+        String languageServerId = languageServerDefinition.getId();
+
+        // Commons settings (user defined language server + extension point)
+        org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings.LanguageServerDefinitionSettings settings = org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings.getInstance(project)
+                .getLanguageServerSettings(languageServerId);
+        final ErrorReportingKind errorReportingKind = settings != null && settings.getErrorReportingKind() != null ? settings.getErrorReportingKind() : ErrorReportingKind.as_notification;
+        final ServerTrace serverTrace = settings != null && settings.getServerTrace() != null ? settings.getServerTrace() : ServerTrace.off;
+        this.setReportErrorKind(errorReportingKind);
+        this.setServerTrace(serverTrace);
+
+        if (languageServerDefinition instanceof UserDefinedLanguageServerDefinition) {
+            // User defined language server
+            org.microshed.lsp4ij.launching.UserDefinedLanguageServerSettings.UserDefinedLanguageServerItemSettings userDefinedLanguageServerSettings = UserDefinedLanguageServerSettings.getInstance().getLaunchConfigSettings(languageServerId);
+            if (userDefinedLanguageServerSettings != null) {
+                this.setCommandLine(userDefinedLanguageServerSettings.getCommandLine());
+                this.setConfigurationContent(userDefinedLanguageServerSettings.getConfigurationContent());
+                this.setInitializationOptionsContent(userDefinedLanguageServerSettings.getInitializationOptionsContent());
+
+                List<ServerMappingSettings> languageMappings = userDefinedLanguageServerSettings.getMappings()
+                        .stream()
+                        .filter(mapping -> !StringUtils.isEmpty(mapping.getLanguage()))
+                        .collect(Collectors.toList());
+                this.setLanguageMappings(languageMappings);
+
+                List<ServerMappingSettings> fileTypeMappings = userDefinedLanguageServerSettings.getMappings()
+                        .stream()
+                        .filter(mapping -> !StringUtils.isEmpty(mapping.getFileType()))
+                        .collect(Collectors.toList());
+                this.setFileTypeMappings(fileTypeMappings);
+
+                List<ServerMappingSettings> fileNamePatternMappings = userDefinedLanguageServerSettings.getMappings()
+                        .stream()
+                        .filter(mapping -> mapping.getFileNamePatterns() != null)
+                        .collect(Collectors.toList());
+                this.setFileNamePatternMappings(fileNamePatternMappings);
+            }
+        } else {
+            // Language server from extension point
+            if (settings != null) {
+                this.setDebugPort(settings.getDebugPort());
+                this.setDebugSuspend(settings.isDebugSuspend());
+            }
+            List<LanguageServerFileAssociation> mappings = LanguageServersRegistry.getInstance().findLanguageServerDefinitionFor(languageServerId);
+            List<ServerMappingSettings> languageMappings = mappings
+                    .stream()
+                    .filter(mapping -> mapping.getLanguage() != null)
+                    .map(mapping -> {
+                        Language language = mapping.getLanguage();
+                        String languageId = mapping.getLanguageId();
+                        return ServerMappingSettings.createLanguageMappingSettings(language.getID(), languageId);
+                    })
+                    .collect(Collectors.toList());
+            this.setLanguageMappings(languageMappings);
+
+            List<ServerMappingSettings> fileTypeMappings = mappings
+                    .stream()
+                    .filter(mapping -> mapping.getFileType() != null)
+                    .map(mapping -> {
+                        FileType fileType = mapping.getFileType();
+                        String languageId = mapping.getLanguageId();
+                        return ServerMappingSettings.createFileTypeMappingSettings(fileType.getName(), languageId);
+                    })
+                    .collect(Collectors.toList());
+            this.setFileTypeMappings(fileTypeMappings);
+
+            List<ServerMappingSettings> fileNamePatternMappings = mappings
+                    .stream()
+                    .filter(mapping -> mapping.getFileNameMatchers() != null)
+                    .map(mapping -> {
+                        List<FileNameMatcher> matchers = mapping.getFileNameMatchers();
+                        String languageId = mapping.getLanguageId();
+                        return ServerMappingSettings.createFileNamePatternsMappingSettings(matchers.
+                                stream()
+                                .map(FileNameMatcher::getPresentableString)
+                                .toList(), languageId);
+                    })
+                    .collect(Collectors.toList());
+            this.setFileNamePatternMappings(fileNamePatternMappings);
+        }
+    }
+
+    /**
+     * Update the proper language server settings and language server definition from the UI fields.
+     */
+    public void apply() {
+        String languageServerId = languageServerDefinition.getId();
+
+        // Update commons settings
+        org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings.LanguageServerDefinitionSettings settings = new org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings.LanguageServerDefinitionSettings();
+        settings.setServerTrace(getServerTrace());
+        settings.setErrorReportingKind(getReportErrorKind());
+
+        if (languageServerDefinition instanceof UserDefinedLanguageServerDefinition launch) {
+            // Register settings and server definition without firing events
+            var settingsChangedEvent = org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings
+                    .getInstance(project)
+                    .updateSettings(languageServerId, settings, false);
+            // Update user-defined language server settings
+            var serverChangedEvent = LanguageServersRegistry.getInstance()
+                    .updateServerDefinition(
+                            launch,
+                            getDisplayName(),
+                            getCommandLine(),
+                            getMappings(),
+                            getConfigurationContent(),
+                            getInitializationOptionsContent(),
+                            false);
+            if (settingsChangedEvent != null) {
+                // Settings has changed, fire the event
+                org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings
+                        .getInstance(project)
+                        .handleChanged(settingsChangedEvent);
+            }
+            if (serverChangedEvent != null) {
+                // Server definition has changed, fire the event
+                LanguageServersRegistry.getInstance().handleChangeEvent(serverChangedEvent);
+            }
+        } else {
+            // Update user-defined language server settings
+            settings.setDebugPort(getDebugPort());
+            settings.setDebugSuspend(isDebugSuspend());
+            org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings.getInstance(project)
+                    .updateSettings(languageServerId, settings);
+        }
+    }
+
+    private String getDisplayName() {
+        return languageServerNameProvider != null ? languageServerNameProvider.getDisplayName() : languageServerDefinition.getDisplayName();
+    }
+
+    private JPanel createSettings(JComponent description, boolean launchingServerDefinition) {
+        FormBuilder builder = FormBuilder
+                .createFormBuilder()
+                .setFormLeftIndent(10);
+        this.languageServerPanel = new LanguageServerPanel(builder,
+                description,
+                launchingServerDefinition ? LanguageServerPanel.EditionMode.EDIT_USER_DEFINED :
+                        LanguageServerPanel.EditionMode.EDIT_EXTENSION);
+        this.mappingPanel = languageServerPanel.getMappingsPanel();
+        return builder
+                .addComponentFillVertically(new JPanel(), 50)
                 .getPanel();
     }
 
@@ -70,12 +301,16 @@ public class LanguageServerView implements Disposable {
         JPanel titledComponent = UI.PanelFactory.grid().createPanel();
         titledComponent.setMinimumSize(JBUI.emptySize());
         titledComponent.setPreferredSize(JBUI.emptySize());
-        if (description != null && !description.isBlank()) {
+        if (description == null) {
+            description = "";
+        }
+        description = description.trim();
+        if (!description.isBlank()) {
             titledComponent = UI.PanelFactory.panel(titledComponent)
-                                    .withComment(description)
-                                    .resizeX(true)
-                                    .resizeY(true)
-                                    .createPanel();
+                    .withComment(description)
+                    .resizeX(true)
+                    .resizeY(true)
+                    .createPanel();
         }
         return titledComponent;
     }
@@ -85,39 +320,102 @@ public class LanguageServerView implements Disposable {
     }
 
     public String getDebugPort() {
-        return debugPortField.getNumber() <= 0? "": Integer.toString(debugPortField.getNumber());
+        var debugPortField = languageServerPanel.getDebugPortField();
+        return debugPortField.getNumber() <= 0 ? "" : Integer.toString(debugPortField.getNumber());
     }
 
     public void setDebugPort(String debugPort) {
+        var debugPortField = languageServerPanel.getDebugPortField();
         int port = 0;
         try {
             port = Integer.parseInt(debugPort);
             if (port < debugPortField.getMin() || port > debugPortField.getMax()) {
                 port = 0;
             }
-        } catch (Exception ignore) {}
+        } catch (Exception ignore) {
+        }
         debugPortField.setNumber(port);
     }
 
     public boolean isDebugSuspend() {
-        return debugSuspendCheckBox.isSelected();
+        return languageServerPanel.getDebugSuspendCheckBox().isSelected();
     }
 
     public void setDebugSuspend(boolean debugSuspend) {
-        debugSuspendCheckBox.setSelected(debugSuspend);
+        languageServerPanel.getDebugSuspendCheckBox().setSelected(debugSuspend);
     }
 
     public ServerTrace getServerTrace() {
-        return (ServerTrace) serverTraceComboBox.getSelectedItem();
+        return (ServerTrace) languageServerPanel.getServerTraceComboBox().getSelectedItem();
     }
 
     public void setServerTrace(ServerTrace serverTrace) {
-        serverTraceComboBox.setSelectedItem(serverTrace);
+        languageServerPanel.getServerTraceComboBox().setSelectedItem(serverTrace);
+    }
+
+    public ErrorReportingKind getReportErrorKind() {
+        return (ErrorReportingKind) languageServerPanel.getErrorReportingKindCombo().getSelectedItem();
+    }
+
+    public void setReportErrorKind(ErrorReportingKind errorReportingKind) {
+        languageServerPanel.getErrorReportingKindCombo().setSelectedItem(errorReportingKind);
+    }
+
+    public String getCommandLine() {
+        return languageServerPanel.getCommandLine().getText();
+    }
+
+    public void setCommandLine(String commandLine) {
+        languageServerPanel.getCommandLine().setText(commandLine);
+    }
+
+    public void setLanguageMappings(@NotNull List<ServerMappingSettings> mappings) {
+        mappingPanel.setLanguageMappings(mappings);
+    }
+
+    public void setFileTypeMappings(@NotNull List<ServerMappingSettings> mappings) {
+        mappingPanel.setFileTypeMappings(mappings);
+    }
+
+    public void setFileNamePatternMappings(List<ServerMappingSettings> mappings) {
+        mappingPanel.setFileNamePatternMappings(mappings);
+    }
+
+    public String getConfigurationContent() {
+        return languageServerPanel.getConfiguration().getText();
+    }
+
+    public void setConfigurationContent(String configurationContent) {
+        var configuration = languageServerPanel.getConfiguration();
+        configuration.setText(configurationContent);
+        configuration.setCaretPosition(0);
+    }
+
+    public String getInitializationOptionsContent() {
+        return languageServerPanel.getInitializationOptionsWidget().getText();
+    }
+
+    public void setInitializationOptionsContent(String initializationOptionsContent) {
+        var initializationOptions = languageServerPanel.getInitializationOptionsWidget();
+        initializationOptions.setText(initializationOptionsContent);
+        initializationOptions.setCaretPosition(0);
     }
 
     @Override
     public void dispose() {
-
     }
 
+    public List<ServerMappingSettings> getMappings() {
+        return mappingPanel.getAllMappings();
+    }
+
+
+    /**
+     * Returns true if the command is editing and false otherwise.
+     *
+     * @return true if the command is editing and false otherwise.
+     */
+    public boolean isEditingCommand() {
+        return languageServerPanel.getCommandLine() != null && languageServerPanel.getCommandLine().hasFocus();
+    }
 }

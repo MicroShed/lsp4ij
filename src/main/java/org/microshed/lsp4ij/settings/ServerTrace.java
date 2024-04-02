@@ -14,23 +14,14 @@
 package org.microshed.lsp4ij.settings;
 
 /**
- * Language server trace level.
+ * Language server trace level used to show the LSP requests/responses/notifications in the LSP console.
  */
 public enum ServerTrace {
+    off, // don't show any messages
+    messages, // show only message without detail
+    verbose; // show message with detail
 
-    off,
-    messages,
-    verbose;
-
-    public static ServerTrace getServerTrace(String serverTrace) {
-        if (serverTrace == null || serverTrace.isEmpty()) {
-            return ServerTrace.off;
-        }
-        try {
-            return ServerTrace.valueOf(serverTrace);
-        }
-        catch(Exception e) {
-            return ServerTrace.off;
-        }
+    public static ServerTrace getDefaultValue() {
+        return off;
     }
 }

@@ -16,9 +16,8 @@ package org.microshed.lsp4ij.console;
 import com.intellij.openapi.Disposable;
 import com.intellij.util.ui.JBInsets;
 
+import javax.swing.*;
 import java.awt.*;
-import javax.swing.JComponent;
-import javax.swing.JPanel;
 
 abstract class SimpleCardLayoutPanel<V extends JComponent> extends JPanel implements Disposable {
 

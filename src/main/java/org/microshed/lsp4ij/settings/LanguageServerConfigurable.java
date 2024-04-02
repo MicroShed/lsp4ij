@@ -18,7 +18,8 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.NamedConfigurable;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.NlsContexts;
-import org.microshed.lsp4ij.LanguageServersRegistry;
+import org.microshed.lsp4ij.server.definition.LanguageServerDefinition;
+import org.microshed.lsp4ij.server.definition.launching.UserDefinedLanguageServerDefinition;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -31,26 +32,29 @@ import javax.swing.*;
  *     <li>Suspend and wait for a debugger</li>
  * </ul>
  */
-public class LanguageServerConfigurable extends NamedConfigurable<LanguageServersRegistry.LanguageServerDefinition> {
+public class LanguageServerConfigurable extends NamedConfigurable<LanguageServerDefinition> implements LanguageServerView.LanguageServerNameProvider {
 
-    private final LanguageServersRegistry.LanguageServerDefinition languageServerDefinition;
+    private final LanguageServerDefinition languageServerDefinition;
     private final Project project;
 
     private LanguageServerView myView;
 
-    public LanguageServerConfigurable(LanguageServersRegistry.LanguageServerDefinition languageServerDefinition, Runnable updater, Project project) {
-        super(false, updater);
+    public LanguageServerConfigurable(LanguageServerDefinition languageServerDefinition, Runnable updater, Project project) {
+        super(languageServerDefinition instanceof UserDefinedLanguageServerDefinition, updater);
         this.languageServerDefinition = languageServerDefinition;
         this.project = project;
     }
 
     @Override
     public void setDisplayName(String name) {
-        // Do nothing: the language server name is nt editable.
+        // Do nothing: the language server name is not editable.
+        if (languageServerDefinition instanceof UserDefinedLanguageServerDefinition launchConfiguration) {
+            launchConfiguration.setName(name);
+        }
     }
 
     @Override
-    public LanguageServersRegistry.LanguageServerDefinition getEditableObject() {
+    public LanguageServerDefinition getEditableObject() {
         return languageServerDefinition;
     }
 
@@ -62,7 +66,7 @@ public class LanguageServerConfigurable extends NamedConfigurable<LanguageServer
     @Override
     public JComponent createOptionsPanel() {
         if (myView == null) {
-            myView = new LanguageServerView(languageServerDefinition);
+            myView = new LanguageServerView(languageServerDefinition, this, project);
         }
         return myView.getComponent();
     }
@@ -74,44 +78,22 @@ public class LanguageServerConfigurable extends NamedConfigurable<LanguageServer
 
     @Override
     public @Nullable Icon getIcon(boolean expanded) {
-        String serverId = languageServerDefinition.id;
-        return LanguageServersRegistry.getInstance().getServerIcon(serverId);
+        return languageServerDefinition.getIcon();
     }
 
     @Override
     public boolean isModified() {
-        UserDefinedLanguageServerSettings.LanguageServerDefinitionSettings settings = UserDefinedLanguageServerSettings.getInstance(project)
-                .getLanguageServerSettings(languageServerDefinition.id);
-        if (settings == null) {
-            return true;
-        }
-        return !(myView.getDebugPort().equals(settings.getDebugPort())
-                && myView.isDebugSuspend() == settings.isDebugSuspend()
-                && myView.getServerTrace() == settings.getServerTrace());
+        return myView.isModified();
     }
 
     @Override
     public void apply() throws ConfigurationException {
-        UserDefinedLanguageServerSettings.LanguageServerDefinitionSettings settings = new UserDefinedLanguageServerSettings.LanguageServerDefinitionSettings();
-        settings.setDebugPort(myView.getDebugPort());
-        settings.setDebugSuspend(myView.isDebugSuspend());
-        settings.setServerTrace(myView.getServerTrace());
-        UserDefinedLanguageServerSettings.getInstance(project).setLanguageServerSettings(languageServerDefinition.id, settings);
+        myView.apply();
     }
 
     @Override
     public void reset() {
-        ServerTrace serverTrace = ServerTrace.off;
-        UserDefinedLanguageServerSettings.LanguageServerDefinitionSettings settings = UserDefinedLanguageServerSettings.getInstance(project)
-                .getLanguageServerSettings(languageServerDefinition.id);
-        if (settings != null) {
-            myView.setDebugPort(settings.getDebugPort());
-            myView.setDebugSuspend(settings.isDebugSuspend());
-            if (settings.getServerTrace() != null) {
-                serverTrace = settings.getServerTrace();
-            }
-        }
-        myView.setServerTrace(serverTrace);
+        myView.reset();
     }
 
     @Override
