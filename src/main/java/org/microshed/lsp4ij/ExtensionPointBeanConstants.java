@@ -16,8 +16,8 @@ public class ExtensionPointBeanConstants {
     private static ResourceBundle resourceBundle = null;
     private static String SERVER_EXT_NAME = ".server";
     private static String LANGUAGE_MAPPING_EXT_NAME = ".languageMapping";
-    private static String FILENAMEPATTERN_MAPPING_EXT_NAME = ".filenamepatternMapping";
-    private static String FILETYPE_MAPPING_EXT_NAME = ".filetypeMapping";
+    private static String FILENAMEPATTERN_MAPPING_EXT_NAME = ".fileNamePatternMapping";
+    private static String FILETYPE_MAPPING_EXT_NAME = ".fileTypeMapping";
 
 
     private static String getNamespaceName() {
