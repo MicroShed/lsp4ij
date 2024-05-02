@@ -272,11 +272,13 @@ public class LSPCompletionProposal extends LookupElement {
                 insertText = getInsertText();
                 int startOffset = this.bestOffset;
                 int endOffset = offset;
-                // Try to get the text range to replace it.
-                // foo.b|ar --> foo.[bar]
-                TextRange textRange = LSPIJUtils.getTokenRange(document, this.initialOffset);
-                if (textRange != null) {
-                    startOffset = textRange.getStartOffset();
+                if (startOffset == 0) {
+                    // Try to get the text range to replace it.
+                    // foo.b|ar --> foo.[bar]
+                    TextRange textRange = LSPIJUtils.getTokenRange(document, this.initialOffset);
+                    if (textRange != null) {
+                        startOffset = textRange.getStartOffset();
+                    }
                 }
                 Position start = LSPIJUtils.toPosition(startOffset, document);
                 Position end = LSPIJUtils.toPosition(endOffset, document); // need 2 distinct objects
