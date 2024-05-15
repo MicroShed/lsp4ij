@@ -38,6 +38,8 @@ import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.List;
@@ -48,6 +50,7 @@ import java.util.List;
  */
 public class LSPDiagnosticAnnotator extends ExternalAnnotator<Boolean, Boolean> {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(LSPDiagnosticAnnotator.class);
     @Nullable
     @Override
     public Boolean collectInformation(@NotNull PsiFile file, @NotNull Editor editor, boolean hasErrors) {
@@ -116,10 +119,14 @@ public class LSPDiagnosticAnnotator extends ExternalAnnotator<Boolean, Boolean> 
 
         // Register lazy quick fixes
         List<LSPLazyCodeActionIntentionAction> fixes = diagnosticsForServer.getQuickFixesFor(diagnostic);
+        String s;
+        s = "Adding quick fixes, count="+fixes.size() + "\n";
         for (IntentionAction fix : fixes) {
+            s += "adding fix " + fix.getText() + "\n";
             builder.withFix(fix);
         }
         builder.create();
+        LOGGER.debug(s);
     }
 
     /**
