@@ -15,8 +15,10 @@ public class ExtensionPointBeanConstants {
     private static String pluginNamespaceProperty = "pluginNamespace";
     private static ResourceBundle resourceBundle = null;
     private static String SERVER_EXT_NAME = ".server";
-    private static String SERVER_ICON_EXT_NAME = ".serverIconProvider";
     private static String LANGUAGE_MAPPING_EXT_NAME = ".languageMapping";
+    private static String FILENAMEPATTERN_MAPPING_EXT_NAME = ".fileNamePatternMapping";
+    private static String FILETYPE_MAPPING_EXT_NAME = ".fileTypeMapping";
+
 
     private static String getNamespaceName() {
         if (resourceBundle == null) {
@@ -32,11 +34,15 @@ public class ExtensionPointBeanConstants {
         return getNamespaceName() + SERVER_EXT_NAME;
     }
 
-    public static String getServerIconExtensionName() {
-        return getNamespaceName() + SERVER_ICON_EXT_NAME;
-    }
-
     public static String getLanguageMappingExtensionName() {
         return getNamespaceName() + LANGUAGE_MAPPING_EXT_NAME;
+    }
+
+    public static String getFileNamePatternMappingExtensionName() {
+        return getNamespaceName() + FILENAMEPATTERN_MAPPING_EXT_NAME;
+    }
+
+    public static String getFileTypeMappingExtensionName() {
+        return getNamespaceName() + FILETYPE_MAPPING_EXT_NAME;
     }
 }

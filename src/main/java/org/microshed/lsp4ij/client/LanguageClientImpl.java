@@ -11,13 +11,16 @@
 package org.microshed.lsp4ij.client;
 
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.command.WriteCommandAction;
+import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Disposer;
-import org.microshed.lsp4ij.LSPIJUtils;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiFile;
 import org.microshed.lsp4ij.LanguageServerWrapper;
 import org.microshed.lsp4ij.ServerMessageHandler;
-import org.microshed.lsp4ij.operations.diagnostics.LSPDiagnosticHandler;
+import org.microshed.lsp4ij.internal.InlayHintsFactoryBridge;
+import org.microshed.lsp4ij.LSPIJUtils;
+import org.microshed.lsp4ij.features.diagnostics.LSPDiagnosticHandler;
 import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageServer;
@@ -44,7 +47,6 @@ public class LanguageClientImpl implements LanguageClient, Disposable {
 
     public LanguageClientImpl(Project project) {
         this.project = project;
-        Disposer.register(project, this);
     }
 
     public Project getProject() {
@@ -73,7 +75,7 @@ public class LanguageClientImpl implements LanguageClient, Disposable {
 
     @Override
     public final void showMessage(MessageParams messageParams) {
-        ServerMessageHandler.showMessage(wrapper.serverDefinition.label, messageParams);
+        ServerMessageHandler.showMessage(wrapper.getServerDefinition().getDisplayName(), messageParams);
     }
 
     @Override
@@ -89,7 +91,7 @@ public class LanguageClientImpl implements LanguageClient, Disposable {
     @Override
     public final CompletableFuture<ApplyWorkspaceEditResponse> applyEdit(ApplyWorkspaceEditParams params) {
         CompletableFuture<ApplyWorkspaceEditResponse> future = new CompletableFuture<>();
-        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+        WriteCommandAction.runWriteCommandAction(getProject(), () -> {
             LSPIJUtils.applyWorkspaceEdit(params.getEdit());
             future.complete(new ApplyWorkspaceEditResponse(true));
         });
@@ -114,6 +116,27 @@ public class LanguageClientImpl implements LanguageClient, Disposable {
             return CompletableFuture.completedFuture(folders);
         }
         return CompletableFuture.completedFuture(Collections.emptyList());
+    }
+
+    @Override
+    public CompletableFuture<Void> refreshInlayHints() {
+        return CompletableFuture.runAsync(() -> {
+            if (wrapper == null) {
+                return;
+            }
+            refreshInlayHintsForAllOpenedFiles();
+        });
+    }
+
+    private void refreshInlayHintsForAllOpenedFiles() {
+        for (var fileData : wrapper.getConnectedFiles()) {
+            VirtualFile file = fileData.getFile();
+            final PsiFile psiFile = LSPIJUtils.getPsiFile(file, project);
+            if (psiFile != null) {
+                Editor[] editors = LSPIJUtils.editorsForFile(file, getProject());
+                InlayHintsFactoryBridge.refreshInlayHints(psiFile, editors, true);
+            }
+        }
     }
 
     @Override

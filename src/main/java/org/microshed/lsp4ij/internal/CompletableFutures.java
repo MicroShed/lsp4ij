@@ -1,0 +1,135 @@
+/*******************************************************************************
+ * Copyright (c) 2023 Red Hat Inc. and others.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v. 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+ * which is available at https://www.apache.org/licenses/LICENSE-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+ *
+ * Contributors:
+ *     Red Hat Inc. - initial API and implementation
+ *******************************************************************************/
+package org.microshed.lsp4ij.internal;
+
+import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.psi.PsiFile;
+import org.eclipse.lsp4j.jsonrpc.CancelChecker;
+import org.eclipse.lsp4j.jsonrpc.CompletableFutures.FutureCancelChecker;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.*;
+import java.util.function.Function;
+
+/**
+ * {@link CompletableFuture} utility class.
+ *
+ * @author Angelo ZERR
+ */
+public class CompletableFutures {
+
+    private CompletableFutures() {
+
+    }
+
+    /**
+     * It's a copy of
+     * {@link org.eclipse.lsp4j.jsonrpc.CompletableFutures#computeAsync} that
+     * accepts a function that returns a CompletableFuture.
+     *
+     * @param <R>  the return type of the asynchronous computation
+     * @param code the code to run asynchronously
+     * @return a future that sends the correct $/cancelRequest notification when
+     * canceled
+     * @see CompletableFutures#computeAsyncCompose(Function)
+     */
+    public static <R> CompletableFuture<R> computeAsyncCompose(
+            Function<CancelChecker, CompletableFuture<R>> code) {
+        CompletableFuture<CancelChecker> start = new CompletableFuture<>();
+        CompletableFuture<R> result = start.thenComposeAsync(code);
+        start.complete(new FutureCancelChecker(result));
+        return result;
+    }
+
+    /**
+     * Merge the given futures List<CompletableFuture<List<T>>> in one future CompletableFuture<List<T>.
+     *
+     * @param futures             the list of futures which return a List<T>.
+     * @param cancellationSupport the cancellation support.
+     * @param <T>                 the merged futures.
+     * @return
+     */
+    public static <T> @NotNull CompletableFuture<List<T>> mergeInOneFuture(@NotNull List<CompletableFuture<List<T>>> futures,
+                                                                           @NotNull CancellationSupport cancellationSupport) {
+        CompletableFuture<Void> allFutures = cancellationSupport
+                .execute(CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])));
+        return allFutures.thenApply(Void -> {
+            List<T> mergedDataList = new ArrayList<>(futures.size());
+            for (CompletableFuture<List<T>> dataListFuture : futures) {
+                var data = dataListFuture.join();
+                if (data != null) {
+                    mergedDataList.addAll(data);
+                }
+            }
+            return mergedDataList;
+        });
+    }
+
+    /**
+     * Returns true if the given {@link CompletableFuture} is done normally and false otherwise.
+     *
+     * @param future the completable future.
+     * @return true if the given {@link CompletableFuture} is done normally and false otherwise.
+     */
+    public static boolean isDoneNormally(@Nullable CompletableFuture<?> future) {
+        return future != null && future.isDone() && !future.isCancelled() && !future.isCompletedExceptionally();
+    }
+
+    public static void waitUntilDone(@NotNull CompletableFuture<?> future) throws ExecutionException, ProcessCanceledException {
+        waitUntilDone(future, null);
+    }
+
+    /**
+     * Wait for the done of the given future and stop the wait if {@link ProcessCanceledException} is thrown.
+     *
+     * @param future the future to wait.
+     * @param file
+     */
+    public static void waitUntilDone(@NotNull CompletableFuture<?> future,
+                                     @Nullable PsiFile file) throws ExecutionException, ProcessCanceledException {
+        final long modificationStamp = file != null ? file.getModificationStamp() : -1;
+        while (!future.isDone()) {
+            try {
+                // check progress canceled
+                ProgressManager.checkCanceled();
+                // check psi file
+                if (file != null) {
+                    if (modificationStamp != file.getModificationStamp()) {
+                        throw new CancellationException("Psi file has changed.");
+                    }
+                }
+                // wait for 25 ms
+                future.get(25, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException ignore) {
+                // Ignore timeout
+            } catch (ExecutionException | CompletionException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof CancellationException ce) {
+                    throw ce;
+                }
+                if (cause instanceof ProcessCanceledException pce) {
+                    throw pce;
+                }
+                throw e;
+            } catch (InterruptedException e) {
+                Thread.interrupted();
+            }
+        }
+    }
+
+}

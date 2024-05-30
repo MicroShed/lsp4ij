@@ -13,7 +13,6 @@
  *******************************************************************************/
 package org.microshed.lsp4ij.lifecycle;
 
-import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 import org.microshed.lsp4ij.LanguageServerWrapper;
 import org.eclipse.lsp4j.jsonrpc.MessageConsumer;
@@ -31,10 +30,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class LanguageServerLifecycleManager {
 
     public static LanguageServerLifecycleManager getInstance(@NotNull Project project) {
-        return ServiceManager.getService(project, LanguageServerLifecycleManager.class);
+        return project.getService(LanguageServerLifecycleManager.class);
     }
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(LanguageServerLifecycleManager.class);//$NON-NLS-1$
+    private static final Logger LOGGER = LoggerFactory.getLogger(LanguageServerLifecycleManager.class);
 
     private final Collection<LanguageServerLifecycleListener> listeners;
 
@@ -64,7 +63,7 @@ public class LanguageServerLifecycleManager {
             try {
                 listener.handleStatusChanged(languageServer);
             } catch (Exception e) {
-                LOGGER.error("Error while status changed of the language server '" + languageServer.serverDefinition.id + "'", e);
+                LOGGER.error("Error while status changed of the language server '" + languageServer.getServerDefinition().getId() + "'", e);
             }
         }
     }
@@ -77,7 +76,7 @@ public class LanguageServerLifecycleManager {
             try {
                 listener.handleLSPMessage(message, consumer, languageServer);
             } catch (Exception e) {
-                LOGGER.error("Error while handling LSP message of the language server '" + languageServer.serverDefinition.id + "'", e);
+                LOGGER.error("Error while handling LSP message of the language server '" + languageServer.getServerDefinition().getId() + "'", e);
             }
         }
     }
@@ -90,7 +89,7 @@ public class LanguageServerLifecycleManager {
             try {
                 listener.handleError(languageServer, exception);
             } catch (Exception e) {
-                LOGGER.error("Error while handling error of the language server '" + languageServer.serverDefinition.id + "'", e);
+                LOGGER.error("Error while handling error of the language server '" + languageServer.getServerDefinition().getId() + "'", e);
             }
         }
     }
@@ -100,7 +99,7 @@ public class LanguageServerLifecycleManager {
 
     public void dispose() {
         disposed = true;
-        listeners.stream().forEach(LanguageServerLifecycleListener::dispose);
+        listeners.forEach(LanguageServerLifecycleListener::dispose);
         listeners.clear();
     }
 

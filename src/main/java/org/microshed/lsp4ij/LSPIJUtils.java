@@ -14,10 +14,8 @@ import com.intellij.lang.Language;
 import com.intellij.lang.LanguageUtil;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
-import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.editor.EditorFactory;
-import com.intellij.openapi.editor.RangeMarker;
+import com.intellij.openapi.application.WriteAction;
+import com.intellij.openapi.editor.*;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
@@ -28,10 +26,9 @@ import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.*;
-import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
-import com.intellij.psi.impl.light.LightRecordField;
+import com.intellij.psi.PsiManager;
 import org.microshed.lsp4ij.internal.StringUtils;
 import org.apache.commons.io.FileUtils;
 import org.eclipse.lsp4j.*;
@@ -41,13 +38,11 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
+import java.io.UnsupportedEncodingException;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
@@ -67,35 +62,74 @@ public class LSPIJUtils {
 
     private static final String JRT_SCHEME = JRT_PROTOCOL + ":";
 
-    public static void openInEditor(Location location, Project project) {
+    /**
+     * Open the LSP location in an editor.
+     *
+     * @param location the LSP location.
+     * @param project  the project.
+     * @return true if the file was opened and false otherwise.
+     */
+    public static boolean openInEditor(@Nullable Location location, @NotNull Project project) {
         if (location == null) {
-            return;
+            return false;
         }
-        openInEditor(location.getUri(), location.getRange().getStart(), project);
+        return openInEditor(location.getUri(), location.getRange() != null ? location.getRange().getStart() : null, project);
     }
 
-    public static void openInEditor(String fileUri, Position position, Project project) {
+    /**
+     * Open the given fileUri with the given position in an editor.
+     *
+     * @param fileUri  the file Uri.
+     * @param position the position.
+     * @param project  the project.
+     * @return true if the file was opened and false otherwise.
+     */
+    public static boolean openInEditor(@NotNull String fileUri, @Nullable Position position, @NotNull Project project) {
         VirtualFile file = findResourceFor(fileUri);
-        openInEditor(file, position, project);
+        return openInEditor(file, position, project);
     }
 
-    public static void openInEditor(VirtualFile file, Position position, Project project) {
+    /**
+     * Open the given file with the given position in an editor.
+     *
+     * @param file     the file.
+     * @param position the position.
+     * @param project  the project.
+     * @return true if the file was opened and false otherwise.
+     */
+    public static boolean openInEditor(@Nullable VirtualFile file, @Nullable Position position, @NotNull Project project) {
         if (file != null) {
             if (position == null) {
-                FileEditorManager.getInstance(project).openFile(file, true);
+                return FileEditorManager.getInstance(project).openFile(file, true).length > 0;
             } else {
                 Document document = FileDocumentManager.getInstance().getDocument(file);
                 if (document != null) {
                     OpenFileDescriptor desc = new OpenFileDescriptor(project, file, LSPIJUtils.toOffset(position, document));
-                    FileEditorManager.getInstance(project).openTextEditor(desc, true);
+                    return FileEditorManager.getInstance(project).openTextEditor(desc, true) != null;
                 }
             }
         }
+        return false;
     }
 
-    @Nonnull
-    public static Language getFileLanguage(@Nonnull VirtualFile file, Project project) {
-        return ReadAction.compute(() -> LanguageUtil.getLanguageForPsi(project, file));
+    /**
+     * Returns the file language of the given file and null otherwise.
+     *
+     * @param file    the file.
+     * @param project the project.
+     * @return the file language of the given file and null otherwise.
+     */
+    @Nullable
+    public static Language getFileLanguage(@NotNull VirtualFile file, @NotNull Project project) {
+        if (ApplicationManager.getApplication().isReadAccessAllowed()) {
+            return doGetFileLanguage(file, project);
+        }
+        return ReadAction.compute(() -> doGetFileLanguage(file, project));
+    }
+
+    @Nullable
+    private static Language doGetFileLanguage(@NotNull VirtualFile file, @NotNull Project project) {
+        return LanguageUtil.getLanguageForPsi(project, file);
     }
 
     private static <T extends TextDocumentPositionParams> T toTextDocumentPositionParamsCommon(T param, int offset, Document document) {
@@ -108,10 +142,6 @@ public class LSPIJUtils {
         }
         param.setTextDocument(id);
         return param;
-    }
-
-    public static TextDocumentPositionParams toTextDocumentPosistionParams(int offset, Document document) {
-        return toTextDocumentPositionParamsCommon(new TextDocumentPositionParams(), offset, document);
     }
 
     public static HoverParams toHoverParams(int offset, Document document) {
@@ -176,7 +206,22 @@ public class LSPIJUtils {
     }
 
     /**
-     * Returns the virtual file corresponding to the PSI file.
+     * Returns the Psi file corresponding to the virtual file in the given project.
+     *
+     * @param file    the virtual file.
+     * @param project the project.
+     * @return the Psi file corresponding to the virtual file in the given project.
+     */
+    public static @Nullable PsiFile getPsiFile(@NotNull VirtualFile file, @NotNull Project project) {
+        if (ApplicationManager.getApplication().isReadAccessAllowed()) {
+            return PsiManager.getInstance(project).findFile(file);
+        }
+        return ReadAction.compute(() -> PsiManager.getInstance(project).findFile(file));
+    }
+
+
+    /**
+     * Returns the virtual file corresponding to the Psi file.
      *
      * @return the virtual file, or {@code null} if the file exists only in memory.
      */
@@ -217,9 +262,34 @@ public class LSPIJUtils {
         return ReadAction.compute(() -> ProjectFileIndex.getInstance(project).getModuleForFile(file, false));
     }
 
-    public static int toOffset(Position start, Document document) throws IndexOutOfBoundsException {
-        int lineStartOffset = document.getLineStartOffset(start.getLine());
-        return lineStartOffset + start.getCharacter();
+    /**
+     * Returns a valid offset from the given position in the given document even if position is invalid.
+     *
+     * <ul>
+     *     <li>If a line number is negative, it defaults to 0.</li>
+     *     <li>If a line number is greater than the number of lines in a document, it defaults back to the number of lines in the document.</li>
+     *     <li>If the character value is greater than the line length it defaults back to the line length</li>
+     * </ul>
+     *
+     * @param position the LSP position.
+     * @param document the IJ document.
+     * @return a valid offset from the given position in the given document.
+     */
+    public static int toOffset(@NotNull Position position, @NotNull Document document) {
+        // Adjust position line/character according to this comment https://github.com/microsoft/vscode-languageserver-node/blob/ed3cd0f78c1495913bda7318ace2be7f968008af/textDocument/src/main.ts#L26
+        int line = position.getLine();
+        if (line < 0) {
+            // If a line number is negative, it defaults to 0.
+            line = 0;
+        } else {
+            // If a line number is greater than the number of lines in a document, it defaults back to the number of lines in the document.
+            line = Math.min(line, document.getLineCount() > 0 ? document.getLineCount() -1 : 0);
+        }
+        int lineStartOffset = document.getLineStartOffset(line);
+        int lineEndOffset = document.getLineEndOffset(line);
+        int offset = lineStartOffset + position.getCharacter();
+        // If the character value is greater than the line length it defaults back to the line length
+        return Math.min(offset, lineEndOffset);
     }
 
     public static Position toPosition(int offset, Document document) {
@@ -230,8 +300,8 @@ public class LSPIJUtils {
         return new Position(line, column);
     }
 
-    @Nonnull
-    public static WorkspaceFolder toWorkspaceFolder(@Nonnull Project project) {
+    @NotNull
+    public static WorkspaceFolder toWorkspaceFolder(@NotNull Project project) {
         WorkspaceFolder folder = new WorkspaceFolder();
         folder.setUri(toUri(project).toASCIIString());
         folder.setName(project.getName());
@@ -260,20 +330,41 @@ public class LSPIJUtils {
         return new Range(LSPIJUtils.toPosition(range.getStartOffset(), document), LSPIJUtils.toPosition(range.getEndOffset(), document));
     }
 
+    public static @Nullable TextRange toTextRange(Range range, Document document) {
+        return toTextRange(range, document, false);
+    }
+
     /**
      * Returns the IJ {@link TextRange} from the given LSP range and null otherwise.
      *
-     * @param range    the LSP range to conert.
+     * @param range    the LSP range to convert.
      * @param document the document.
      * @return the IJ {@link TextRange} from the given LSP range and null otherwise.
      */
-    public static @Nullable TextRange toTextRange(Range range, Document document) {
+    public static @Nullable TextRange toTextRange(Range range, Document document, boolean adjust) {
         try {
-            final int start = LSPIJUtils.toOffset(range.getStart(), document);
-            final int end = LSPIJUtils.toOffset(range.getEnd(), document);
-            if (start >= end || end > document.getTextLength()) {
+            int start = LSPIJUtils.toOffset(range.getStart(), document);
+            int end = LSPIJUtils.toOffset(range.getEnd(), document);
+            int docLength = document.getTextLength();
+            if (start > end || end > docLength) {
                 // Language server reports invalid diagnostic, ignore it.
                 return null;
+            }
+            if (start != end) {
+                return new TextRange(start, end);
+            }
+            if (!adjust) {
+                // No adjustment, the TextRange with start/end offset is invalid
+                return null;
+            }
+            // Select token at current offset, if possible
+            TextRange tokenRange = getTokenRange(document, start);
+            if (tokenRange != null) {
+                return tokenRange;
+            }
+            // Adjust the end offset if the offset is not at the end of the line.
+            if (!isEndOfLine(document, range.getEnd().getLine(), start)) {
+                end++;
             }
             return new TextRange(start, end);
         } catch (IndexOutOfBoundsException e) {
@@ -283,34 +374,53 @@ public class LSPIJUtils {
         }
     }
 
-    public static Location toLocation(PsiElement psiMember) {
-        PsiElement sourceElement = getNavigationElement(psiMember);
+    private static boolean isEndOfLine(@NotNull Document document, int line, int offset) {
+        return offset == document.getLineEndOffset(line);
+    }
 
-        if (sourceElement != null) {
-            PsiFile file = sourceElement.getContainingFile();
-            Document document = PsiDocumentManager.getInstance(psiMember.getProject()).getDocument(file);
-            if (document != null) {
-                TextRange range = sourceElement.getTextRange();
-                return toLocation(file, toRange(range, document));
+    /**
+     * Returns the token range from the document at given offset and null otherwise.
+     *
+     * <code><pre>
+     *  - fo|o bar -> [foo]
+     *  - fo|o.bar() -> [foo]
+     *  - foo.b|ar() -> [bar]
+     *  - foo.bar(|) -> null
+     *  - foo  |  bar -> null
+     * </pre></code>
+     *
+     * @param document
+     * @param offset
+     * @return the token range from the document at given offset and null otherwise.
+     */
+    @Nullable
+    public static TextRange getTokenRange(Document document, int offset) {
+        if (offset > 0 && offset >= document.getTextLength()) {
+            offset = document.getTextLength() - 1;
+        }
+        int start = getLeftOffsetOfPart(document, offset);
+        int end = getRightOffsetOfPart(document, offset);
+        return (start < end) ? new TextRange(start, end) : null;
+    }
+
+    private static int getLeftOffsetOfPart(Document document, int offset) {
+        for (int i = offset - 1; i >= 0; i--) {
+            char c = document.getCharsSequence().charAt(i);
+            if (!Character.isJavaIdentifierPart(c)) {
+                return i + 1;
             }
         }
-        return null;
+        return 0;
     }
 
-    private static @Nullable PsiElement getNavigationElement(PsiElement psiMember) {
-        //FIXME LightRecordField depends on the com.intellij.java plugin
-        if (psiMember instanceof LightRecordField) {
-            psiMember = ((LightRecordField) psiMember).getRecordComponent();
+    private static int getRightOffsetOfPart(Document document, int offset) {
+        for (int i = offset; i < document.getTextLength(); i++) {
+            char c = document.getCharsSequence().charAt(i);
+            if (!Character.isJavaIdentifierPart(c)) {
+                return i;
+            }
         }
-        return psiMember.getNavigationElement();
-    }
-
-    public static Location toLocation(PsiFile file, Range range) {
-        return toLocation(file.getVirtualFile(), range);
-    }
-
-    public static Location toLocation(VirtualFile file, Range range) {
-        return new Location(toUriAsString(file), range);
+        return document.getTextLength();
     }
 
     public static void applyWorkspaceEdit(WorkspaceEdit edit) {
@@ -363,7 +473,15 @@ public class LSPIJUtils {
             }
         } else if (edit.getChanges() != null) {
             for (Map.Entry<String, List<TextEdit>> change : edit.getChanges().entrySet()) {
-                VirtualFile file = findResourceFor(change.getKey());
+                String fileUri = change.getKey();
+                VirtualFile file = findResourceFor(fileUri);
+                if (file == null) {
+                    try {
+                        file = createFile(fileUri);
+                    } catch (Exception e) {
+                        LOGGER.error("Cannot create file '" + fileUri + "'", e);
+                    }
+                }
                 if (file != null) {
                     Document document = getDocument(file);
                     if (document != null) {
@@ -428,17 +546,11 @@ public class LSPIJUtils {
         }
     }
 
-
-    public static Language getDocumentLanguage(Document document, Project project) {
-        VirtualFile file = FileDocumentManager.getInstance().getFile(document);
-        return getFileLanguage(file, project);
-    }
-
     public static @Nullable VirtualFile findResourceFor(URI uri) {
         return LocalFileSystem.getInstance().findFileByIoFile(Paths.get(uri).toFile());
     }
 
-    public static @Nullable VirtualFile findResourceFor(String uri) {
+    public static @Nullable VirtualFile findResourceFor(@NotNull String uri) {
         if (uri.startsWith(JAR_SCHEME) || uri.startsWith(JRT_SCHEME)) {
             // ex : jar:file:///C:/Users/azerr/.m2/repository/io/quarkus/quarkus-core/3.0.1.Final/quarkus-core-3.0.1.Final.jar!/io/quarkus/runtime/ApplicationConfig.class
             try {
@@ -447,21 +559,62 @@ public class LSPIJUtils {
                 return null;
             }
         }
+        if (uri.contains("%")) {
+            try {
+                // ex : file:///c%3A/Users/azerr/IdeaProjects/untitled7/test.js
+                // the uri must be decoded (ex : file:///c:/Users) otherwise IntelliJ cannot retrieve the virtual file.
+                uri = URLDecoder.decode(uri, StandardCharsets.UTF_8.name());
+            } catch (UnsupportedEncodingException e) {
+                // Do nothing
+            }
+        }
         return VirtualFileManager.getInstance().findFileByUrl(VfsUtilCore.fixURLforIDEA(uri));
     }
 
+    /**
+     * Returns the editor which is editing the given Psi element and null otherwise.
+     *
+     * @param element the Psi element.
+     * @return the editor which is editing the given Psi element and null otherwise.
+     */
     public static @Nullable Editor editorForElement(@Nullable PsiElement element) {
-        if (element != null && element.getContainingFile() != null && element.getContainingFile().getVirtualFile() != null) {
-            return editorForFile(element.getContainingFile().getVirtualFile(), element.getProject());
+        VirtualFile file = element != null && element.getContainingFile() != null ? element.getContainingFile().getVirtualFile() : null;
+        if (file != null) {
+            return editorForFile(file, element.getProject());
         }
         return null;
     }
 
+    /**
+     * Returns the editors which are editing the given virtual file and an empty array otherwise.
+     *
+     * @param file    the virtual file.
+     * @param project the project.
+     * @return the editors which are editing the given virtual file and an empty array otherwise
+     */
+    public static @NotNull Editor[] editorsForFile(@Nullable VirtualFile file, @NotNull Project project) {
+        return editorsForDocument(getDocument(file), project);
+    }
+
+    /**
+     * Returns the first editor which is editing the given virtual file and an empty array otherwise.
+     *
+     * @param file    the virtual file.
+     * @param project the project.
+     * @return the first editor which is editing the given virtual file and an empty array otherwise
+     */
     private static @Nullable Editor editorForFile(@Nullable VirtualFile file, @NotNull Project project) {
-        Editor[] editors = editorsForDocument(getDocument(file), project);
+        Editor[] editors = editorsForFile(file, project);
         return editors.length > 0 ? editors[0] : null;
     }
 
+    /**
+     * Returns the editors which are editing the given document and an empty array otherwise.
+     *
+     * @param document the document.
+     * @param project  the project.
+     * @return the editors which are editing the given document and an empty array otherwise
+     */
     private static @NotNull Editor[] editorsForDocument(@Nullable Document document, @Nullable Project project) {
         if (document == null) {
             return new Editor[0];
@@ -475,6 +628,10 @@ public class LSPIJUtils {
         param.setPosition(start);
         param.setTextDocument(toTextDocumentIdentifier(fileUri));
         return param;
+    }
+
+    public static TextDocumentIdentifier toTextDocumentIdentifier(VirtualFile file) {
+        return toTextDocumentIdentifier(toUri(file));
     }
 
     public static TextDocumentIdentifier toTextDocumentIdentifier(final URI uri) {
@@ -503,9 +660,12 @@ public class LSPIJUtils {
         marker.dispose();
     }
 
-
     public static void applyEdits(Editor editor, Document document, List<TextEdit> edits) {
-        ApplicationManager.getApplication().runWriteAction(() -> edits.forEach(edit -> applyEdit(editor, edit, document)));
+        if (ApplicationManager.getApplication().isWriteAccessAllowed()) {
+            edits.forEach(edit -> applyEdit(editor, edit, document));
+        } else {
+            WriteAction.run(() -> edits.forEach(edit -> applyEdit(editor, edit, document)));
+        }
     }
 
     public static boolean hasCapability(final Either<Boolean, ? extends Object> eitherCapability) {
@@ -513,6 +673,25 @@ public class LSPIJUtils {
             return false;
         }
         return eitherCapability.isRight() || (eitherCapability.isLeft() && eitherCapability.getLeft());
+    }
+
+    /**
+     * Get the tab size for the given editor.
+     */
+    public static int getTabSize(@NotNull Editor editor) {
+        Project project = editor.getProject();
+        if (ApplicationManager.getApplication().isReadAccessAllowed()) {
+            return editor.getSettings().getTabSize(project);
+        }
+        return ReadAction.compute(() -> editor.getSettings().getTabSize(project));
+    }
+
+    public static boolean isInsertSpaces(@NotNull Editor editor) {
+        Project project = editor.getProject();
+        if (ApplicationManager.getApplication().isReadAccessAllowed()) {
+            return !editor.getSettings().isUseTabCharacter(project);
+        }
+        return ReadAction.compute(() -> !editor.getSettings().isUseTabCharacter(project));
     }
 
     /**
@@ -540,5 +719,4 @@ public class LSPIJUtils {
         }
         return project.getName();
     }
-
 }

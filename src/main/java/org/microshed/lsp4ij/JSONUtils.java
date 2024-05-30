@@ -13,16 +13,17 @@
 *******************************************************************************/
 package org.microshed.lsp4ij;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
+import java.lang.reflect.Method;
+import java.util.HashMap;
+
 import com.google.gson.JsonParser;
 import com.intellij.ide.plugins.cl.PluginAwareClassLoader;
 import org.eclipse.lsp4j.jsonrpc.json.MessageJsonHandler;
 import org.eclipse.lsp4j.jsonrpc.json.adapters.EitherTypeAdapter;
 
-import java.lang.reflect.Method;
-import java.util.HashMap;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 
 /**
  * Utilities for working with JSON that has been converted to an Object using Gson.

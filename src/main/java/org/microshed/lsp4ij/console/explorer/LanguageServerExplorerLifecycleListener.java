@@ -15,9 +15,9 @@ package org.microshed.lsp4ij.console.explorer;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
+import org.microshed.lsp4ij.LanguageServerWrapper;
 import org.microshed.lsp4ij.ServerStatus;
 import org.microshed.lsp4ij.settings.ServerTrace;
-import org.microshed.lsp4ij.LanguageServerWrapper;
 import org.microshed.lsp4ij.lifecycle.LanguageServerLifecycleListener;
 import org.microshed.lsp4ij.settings.UserDefinedLanguageServerSettings;
 import org.eclipse.lsp4j.jsonrpc.MessageConsumer;
@@ -57,7 +57,7 @@ public class LanguageServerExplorerLifecycleListener implements LanguageServerLi
             return;
         }
         LanguageServerProcessTreeNode processTreeNode = updateServerStatus(languageServer, null, false);
-        ServerTrace serverTrace = getServerTrace(explorer.getProject(), languageServer.serverDefinition.id);
+        ServerTrace serverTrace = getServerTrace(explorer.getProject(), languageServer.getServerDefinition().getId());
         if (serverTrace == ServerTrace.off) {
             return;
         }
@@ -100,7 +100,7 @@ public class LanguageServerExplorerLifecycleListener implements LanguageServerLi
         if (settings != null) {
             serverTrace = settings.getServerTrace();
         }
-        return serverTrace != null ? serverTrace : ServerTrace.off;
+        return serverTrace != null ? serverTrace : ServerTrace.getDefaultValue();
     }
 
     private LanguageServerTreeNode findLanguageServerTreeNode(LanguageServerWrapper languageServer) {
@@ -108,7 +108,7 @@ public class LanguageServerExplorerLifecycleListener implements LanguageServerLi
         DefaultMutableTreeNode top = (DefaultMutableTreeNode) tree.getModel().getRoot();
         for (int i = 0; i < top.getChildCount(); i++) {
             LanguageServerTreeNode node = (LanguageServerTreeNode) top.getChildAt(i);
-            if (node.getServerDefinition().equals(languageServer.serverDefinition)) {
+            if (node.getServerDefinition().equals(languageServer.getServerDefinition())) {
                 return node;
             }
         }
@@ -145,7 +145,8 @@ public class LanguageServerExplorerLifecycleListener implements LanguageServerLi
                 if (serverStatusChanged) {
                     node.setServerStatus(status);
                 }
-                if (select) {
+                if (select && !explorer.isEditingCommand(serverNode)) {
+                    // The LSP console is selected only if the command used to start the language server is not editing.
                     explorer.selectAndExpand(node);
                 }
             });

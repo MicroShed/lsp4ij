@@ -22,19 +22,24 @@ import com.intellij.ui.PopupHandler;
 import com.intellij.ui.treeStructure.Tree;
 import org.microshed.lsp4ij.LanguageServersRegistry;
 import org.microshed.lsp4ij.LanguageServiceAccessor;
+import org.microshed.lsp4ij.console.explorer.actions.*;
 import org.microshed.lsp4ij.console.LSPConsoleToolWindowPanel;
-import org.microshed.lsp4ij.console.explorer.actions.CopyStartServerCommandAction;
-import org.microshed.lsp4ij.console.explorer.actions.RestartServerAction;
-import org.microshed.lsp4ij.console.explorer.actions.PauseServerAction;
-import org.microshed.lsp4ij.console.explorer.actions.StopServerAction;
+import org.microshed.lsp4ij.internal.IntelliJPlatformUtils;
 import org.microshed.lsp4ij.lifecycle.LanguageServerLifecycleManager;
+import org.microshed.lsp4ij.server.definition.LanguageServerDefinition;
+import org.microshed.lsp4ij.server.definition.LanguageServerDefinitionListener;
+import org.microshed.lsp4ij.server.definition.launching.UserDefinedLanguageServerDefinition;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.util.Comparator;
+import java.util.Enumeration;
 
 /**
  * Language server explorer which shows language servers and their process.
@@ -47,9 +52,70 @@ public class LanguageServerExplorer extends SimpleToolWindowPanel implements Dis
 
     private final Tree tree;
     private final LanguageServerExplorerLifecycleListener listener;
+    private final LanguageServerDefinitionListener definitionListener = new LanguageServerDefinitionListener() {
+
+        @Override
+        public void handleAdded(@NotNull LanguageServerDefinitionListener.LanguageServerAddedEvent event) {
+            // Some server definitions has been added, add them from the explorer
+            DefaultTreeModel treeModel = (DefaultTreeModel) tree.getModel();
+            DefaultMutableTreeNode root = (DefaultMutableTreeNode) treeModel.getRoot();
+            for (var serverDefinition : event.serverDefinitions) {
+                root.add(new LanguageServerTreeNode(serverDefinition));
+            }
+            treeModel.reload(root);
+            // Select the new language server node
+            selectAndExpand((DefaultMutableTreeNode) root.getChildAt(root.getChildCount() - 1));
+        }
+
+        @Override
+        public void handleRemoved(@NotNull LanguageServerDefinitionListener.LanguageServerRemovedEvent event) {
+            // Some server definitions has been removed, remove them from the explorer
+            DefaultTreeModel treeModel = (DefaultTreeModel) tree.getModel();
+            DefaultMutableTreeNode root = (DefaultMutableTreeNode) treeModel.getRoot();
+            for (var serverDefinition : event.serverDefinitions) {
+                LanguageServerTreeNode node = findNodeForServer(serverDefinition, root);
+                if (node != null) {
+                    root.remove(node);
+                }
+            }
+            treeModel.reload(root);
+            if (root.getChildCount() > 0) {
+                // Select first language server node
+                selectAndExpand((DefaultMutableTreeNode) root.getChildAt(0));
+            }
+        }
+
+        @Override
+        public void handleChanged(@NotNull LanguageServerChangedEvent event) {
+            if (event.nameChanged) {
+                // A server definition name has changed, rename the proper tree node label of the explorer
+                DefaultTreeModel treeModel = (DefaultTreeModel) tree.getModel();
+                DefaultMutableTreeNode root = (DefaultMutableTreeNode) treeModel.getRoot();
+                LanguageServerTreeNode node = findNodeForServer(event.serverDefinition, root);
+                if (node != null) {
+                    treeModel.nodeChanged(node);
+                }
+            }
+        }
+
+        private static @Nullable LanguageServerTreeNode findNodeForServer(@NotNull LanguageServerDefinition serverDefinition, DefaultMutableTreeNode root) {
+            Enumeration<TreeNode> children = root.children();
+            while (children.hasMoreElements()) {
+                TreeNode child = children.nextElement();
+                if (child instanceof LanguageServerTreeNode serverTreeNode) {
+                    if (serverDefinition.equals(serverTreeNode.getServerDefinition())) {
+                        return serverTreeNode;
+                    }
+                }
+            }
+            return null;
+        }
+
+    };
+
     private boolean disposed;
 
-    private TreeSelectionListener treeSelectionListener = event -> {
+    private final TreeSelectionListener treeSelectionListener = event -> {
         if (isDisposed()) {
             return;
         }
@@ -72,6 +138,7 @@ public class LanguageServerExplorer extends SimpleToolWindowPanel implements Dis
         listener = new LanguageServerExplorerLifecycleListener(this);
         LanguageServerLifecycleManager.getInstance(panel.getProject())
                 .addLanguageServerLifecycleListener(listener);
+        LanguageServersRegistry.getInstance().addLanguageServerDefinitionListener(definitionListener);
     }
 
     private void onLanguageServerSelected(LanguageServerTreeNode treeNode) {
@@ -101,10 +168,7 @@ public class LanguageServerExplorer extends SimpleToolWindowPanel implements Dis
         tree.setRootVisible(false);
 
         // Fill tree will all language server definitions, ordered alphabetically
-        LanguageServersRegistry.getInstance().getAllDefinitions().stream()
-                .sorted(Comparator.comparing(LanguageServersRegistry.LanguageServerDefinition::getDisplayName))
-                .map(LanguageServerTreeNode::new)
-                .forEach(top::add);
+        loadLanguageServerDefinitions(top);
 
         tree.setCellRenderer(new LanguageServerTreeRenderer());
 
@@ -120,8 +184,15 @@ public class LanguageServerExplorer extends SimpleToolWindowPanel implements Dis
                 if (path != null) {
                     DefaultActionGroup group = null;
                     Object node = path.getLastPathComponent();
-                    if (node instanceof LanguageServerProcessTreeNode) {
-                        LanguageServerProcessTreeNode processTreeNode = (LanguageServerProcessTreeNode) node;
+                    if (node instanceof LanguageServerTreeNode serverTreeNode) {
+                        // Compute popup menu actions for Language Server node
+                        LanguageServerDefinition languageServerDefinition = serverTreeNode.getServerDefinition();
+                        if (languageServerDefinition instanceof UserDefinedLanguageServerDefinition) {
+                            group = new DefaultActionGroup();
+                            group.add(new DeleteServerAction(languageServerDefinition));
+                        }
+                    } else if (node instanceof LanguageServerProcessTreeNode processTreeNode) {
+                        // Compute popup menu actions for Language Server process node
                         switch (processTreeNode.getServerStatus()) {
                             case starting:
                             case started:
@@ -129,7 +200,7 @@ public class LanguageServerExplorer extends SimpleToolWindowPanel implements Dis
                                 group = new DefaultActionGroup();
                                 AnAction stopServerAction = ActionManager.getInstance().getAction(StopServerAction.ACTION_ID);
                                 group.add(stopServerAction);
-                                if (Boolean.getBoolean("idea.is.internal")) {
+                                if (IntelliJPlatformUtils.isDevMode()) {
                                     // In dev mode, enable the "Pause" action
                                     AnAction pauseServerAction = ActionManager.getInstance().getAction(PauseServerAction.ACTION_ID);
                                     group.add(pauseServerAction);
@@ -163,6 +234,15 @@ public class LanguageServerExplorer extends SimpleToolWindowPanel implements Dis
         return tree;
     }
 
+    private static void loadLanguageServerDefinitions(DefaultMutableTreeNode top) {
+        LanguageServersRegistry.getInstance()
+                .getServerDefinitions()
+                .stream()
+                .sorted(Comparator.comparing(LanguageServerDefinition::getDisplayName))
+                .map(LanguageServerTreeNode::new)
+                .forEach(top::add);
+    }
+
     public Tree getTree() {
         return tree;
     }
@@ -173,6 +253,7 @@ public class LanguageServerExplorer extends SimpleToolWindowPanel implements Dis
         tree.removeTreeSelectionListener(treeSelectionListener);
         LanguageServerLifecycleManager.getInstance(panel.getProject())
                 .removeLanguageServerLifecycleListener(listener);
+        LanguageServersRegistry.getInstance().removeLanguageServerDefinitionListener(definitionListener);
     }
 
     public boolean isDisposed() {
@@ -215,5 +296,14 @@ public class LanguageServerExplorer extends SimpleToolWindowPanel implements Dis
                         listener.handleError(ls, serverError);
                     }
                 });
+    }
+
+    /**
+     * Returns true if the command of the given language server node is editing and false otherwise.
+     *
+     * @return true if the command of the given language server node is editing and false otherwise.
+     */
+    public boolean isEditingCommand(LanguageServerTreeNode serverNode) {
+        return panel.isEditingCommand(serverNode);
     }
 }

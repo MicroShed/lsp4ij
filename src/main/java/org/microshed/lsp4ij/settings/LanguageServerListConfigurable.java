@@ -13,21 +13,33 @@
  *******************************************************************************/
 package org.microshed.lsp4ij.settings;
 
+import com.intellij.openapi.actionSystem.ActionUpdateThread;
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.options.SearchableConfigurable;
+import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.MasterDetailsComponent;
 import com.intellij.openapi.util.NlsContexts;
 import com.intellij.ui.TreeUIHelper;
 import com.intellij.ui.speedSearch.SpeedSearchSupply;
+import com.intellij.util.IconUtil;
 import org.microshed.lsp4ij.LanguageServerBundle;
 import org.microshed.lsp4ij.LanguageServersRegistry;
+import org.microshed.lsp4ij.launching.ui.NewLanguageServerDialog;
+import org.microshed.lsp4ij.server.definition.LanguageServerDefinition;
+import org.microshed.lsp4ij.server.definition.LanguageServerDefinitionListener;
+import org.microshed.lsp4ij.server.definition.launching.UserDefinedLanguageServerDefinition;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import javax.swing.tree.DefaultTreeModel;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
-import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * UI settings which show:
@@ -43,13 +55,29 @@ public class LanguageServerListConfigurable extends MasterDetailsComponent imple
     private static final String ID = "LanguageServers";
 
     private final Project project;
-    private final Set<LanguageServersRegistry.LanguageServerDefinition> languageServeDefinitions;
+    private final LanguageServerDefinitionListener listener = new LanguageServerDefinitionListener() {
+
+        @Override
+        public void handleAdded(@NotNull LanguageServerDefinitionListener.LanguageServerAddedEvent event) {
+            reloadTree();
+        }
+
+        @Override
+        public void handleRemoved(@NotNull LanguageServerDefinitionListener.LanguageServerRemovedEvent event) {
+            reloadTree();
+        }
+
+        @Override
+        public void handleChanged(@NotNull LanguageServerChangedEvent event) {
+            // Do nothing
+        }
+    };
 
     private boolean isTreeInitialized;
 
     public LanguageServerListConfigurable(Project project) {
         this.project = project;
-        this.languageServeDefinitions = LanguageServersRegistry.getInstance().getAllDefinitions();
+        LanguageServersRegistry.getInstance().addLanguageServerDefinitionListener(listener);
     }
 
     @Override
@@ -85,17 +113,65 @@ public class LanguageServerListConfigurable extends MasterDetailsComponent imple
                 .installTreeSpeedSearch(myTree, treePath -> ((MyNode) treePath.getLastPathComponent()).getDisplayName(), true);
     }
 
-    private MyNode addLanguageServerDefinitionNode(LanguageServersRegistry.LanguageServerDefinition languageServerDefinition) {
+    @Override
+    protected @Nullable List<AnAction> createActions(boolean fromPopup) {
+        var addAction = new DumbAwareAction(LanguageServerBundle.message("language.server.action.add"), null, IconUtil.getAddIcon()) {
+            @Override
+            public void actionPerformed(@NotNull AnActionEvent e) {
+                NewLanguageServerDialog dialog = new NewLanguageServerDialog(project);
+                dialog.show();
+            }
+
+            @Override
+            public @NotNull ActionUpdateThread getActionUpdateThread() {
+                return ActionUpdateThread.BGT;
+            }
+        };
+        var removeAction = new DumbAwareAction(LanguageServerBundle.message("language.server.action.remove"), null, IconUtil.getRemoveIcon()) {
+            @Override
+            public void actionPerformed(@NotNull AnActionEvent e) {
+                MyNode[] selectedNodes = myTree.getSelectedNodes(MyNode.class, null);
+                for (var selectedNode : selectedNodes) {
+                    if (isUserDefinedLanguageServerDefinition(selectedNode)) {
+                        var serverDefinition = ((LanguageServerConfigurable) selectedNode.getConfigurable()).getEditableObject();
+                        LanguageServersRegistry.getInstance().removeServerDefinition(serverDefinition);
+                    }
+                }
+            }
+
+            @Override
+            public void update(@NotNull AnActionEvent e) {
+                MyNode[] selectedNodes = myTree.getSelectedNodes(MyNode.class, null);
+                boolean enabled = selectedNodes.length > 0 && Stream.of(selectedNodes)
+                        .anyMatch(LanguageServerListConfigurable::isUserDefinedLanguageServerDefinition);
+                e.getPresentation().setEnabled(enabled);
+            }
+
+            @Override
+            public @NotNull ActionUpdateThread getActionUpdateThread() {
+                return ActionUpdateThread.BGT;
+            }
+        };
+
+        return Arrays.asList(addAction, removeAction);
+    }
+
+    private static boolean isUserDefinedLanguageServerDefinition(MyNode node) {
+        var serverDefinition = ((LanguageServerConfigurable) node.getConfigurable()).getEditableObject();
+        return serverDefinition instanceof UserDefinedLanguageServerDefinition;
+    }
+
+    private void addLanguageServerDefinitionNode(LanguageServerDefinition languageServerDefinition) {
         MyNode node = new MyNode(new LanguageServerConfigurable(languageServerDefinition, TREE_UPDATER, project));
         addNode(node, myRoot);
-        return node;
     }
 
     private void reloadTree() {
         myRoot.removeAllChildren();
-        for (LanguageServersRegistry.LanguageServerDefinition languageServeDefinition : languageServeDefinitions) {
+        for (LanguageServerDefinition languageServeDefinition : LanguageServersRegistry.getInstance().getServerDefinitions()) {
             addLanguageServerDefinitionNode(languageServeDefinition);
         }
+        ((DefaultTreeModel) myTree.getModel()).reload();
     }
 
     @Override
@@ -103,4 +179,11 @@ public class LanguageServerListConfigurable extends MasterDetailsComponent imple
         reloadTree();
         super.reset();
     }
+
+    @Override
+    public void disposeUIResources() {
+        super.disposeUIResources();
+        LanguageServersRegistry.getInstance().removeLanguageServerDefinitionListener(listener);
+    }
+
 }

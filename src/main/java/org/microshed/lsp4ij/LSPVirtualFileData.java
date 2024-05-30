@@ -14,10 +14,8 @@
 package org.microshed.lsp4ij;
 
 import com.intellij.openapi.vfs.VirtualFile;
-import org.microshed.lsp4ij.operations.diagnostics.LSPDiagnosticsForServer;
-import org.microshed.lsp4ij.operations.documentLink.LSPDocumentLinkForServer;
+import org.microshed.lsp4ij.features.diagnostics.LSPDiagnosticsForServer;
 import org.eclipse.lsp4j.Diagnostic;
-import org.eclipse.lsp4j.DocumentLink;
 
 import java.util.List;
 
@@ -28,16 +26,26 @@ import java.util.List;
  */
 public class LSPVirtualFileData {
 
-    private final LSPDiagnosticsForServer diagnosticsForServer;
+    private final VirtualFile file;
 
-    private final LSPDocumentLinkForServer documentLinkForServer;
+    private final LSPDiagnosticsForServer diagnosticsForServer;
 
     private final DocumentContentSynchronizer synchronizer;
 
+
     public LSPVirtualFileData(LanguageServerWrapper languageServerWrapper, VirtualFile file, DocumentContentSynchronizer synchronizer) {
+        this.file = file;
         this.synchronizer = synchronizer;
         this.diagnosticsForServer = new LSPDiagnosticsForServer(languageServerWrapper,file);
-        this.documentLinkForServer = new LSPDocumentLinkForServer(languageServerWrapper, file);
+    }
+
+    /**
+     * Returns the virtual file.
+     *
+     * @return the virtual file.
+     */
+    public VirtualFile getFile() {
+        return file;
     }
 
     public DocumentContentSynchronizer getSynchronizer() {
@@ -48,15 +56,7 @@ public class LSPVirtualFileData {
         return diagnosticsForServer;
     }
 
-    public LSPDocumentLinkForServer getDocumentLinkForServer() {
-        return documentLinkForServer;
-    }
-
     public void updateDiagnostics(List<Diagnostic> diagnostics) {
         diagnosticsForServer.update(diagnostics);
-    }
-
-    public void updateDocumentLink(List<DocumentLink> documentLinks) {
-        documentLinkForServer.update(documentLinks);
     }
 }
