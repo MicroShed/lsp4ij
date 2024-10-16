@@ -1,6 +1,6 @@
 # Tools for IntelliJ IDEA
 
-This project provides classes necessary for the JetBrains IntelliJ interactive development environment to communicate with components that adhere to the language server protocol. This protocol is described in a [Specification](https://microsoft.github.io/language-server-protocol/)
+This project is a fork of an early version of [LSP4IJ](https://github.com/redhat-developer/lsp4ij) which provides classes necessary for the JetBrains IntelliJ interactive development environment to communicate with components that adhere to the language server protocol. This protocol is described in a [Specification](https://microsoft.github.io/language-server-protocol/). [Liberty Tools for IntelliJ](https://github.com/OpenLiberty/liberty-tools-intellij) was the primary consumer of this project but has since adopted the official LSP4IJ plugin. **If your project requires LSP support it is recommended to use the [LSP4IJ plugin](https://plugins.jetbrains.com/plugin/23257-lsp4ij) available in the JetBrains Marketplace.**
 
 ## Requirements
 **Java 11** or later.
